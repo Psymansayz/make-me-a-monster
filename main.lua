@@ -61,7 +61,9 @@ HeadGallery.onResized = function(width, height)
     HeadGallery.savedSize = { width = width, height = height }
 end
 Variants.animFor = function() return HeadSwap.currentAnim() end
-HeadGallery.animFor = Variants.animFor
+-- The heads in the window are NPC heads: with the player's own head in use they play the NPC version of the animation
+-- chosen (the choice itself is kept, so closing the window without picking a head leaves the player's version).
+HeadGallery.animFor = function() return HeadSwap.animForHead(HeadSwap.currentAnim(), false) end
 Variants.animForPlayer = function() return HeadSwap.ownHeadAnim(true) end
 -- The head size setting applies to the heads in the variants window and the debug window too.
 Variants.scaleFor = function() return HeadSwap.scale end
