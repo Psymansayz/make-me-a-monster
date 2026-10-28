@@ -37,7 +37,6 @@ local CURRENT = { 0.55, 0.42, 0.14, 1 }
 local TEXT_LIGHT = 0xE9E5DDFF
 
 local state = nil -- { window, ids, page, pages, current, onPick, labelFor, cells, nav, layoutW, layoutH }
-local closeNext = false
 
 local function log(message)
     print("[make_me_a_monster] " .. message)
@@ -56,10 +55,18 @@ local function destroyCells()
     state.cells = {}
 end
 
+-- A cell's background: the head in use gold, the others dark (lighter under the mouse).
+local function paint(cell, hovered)
+    local c = hovered and HOVER or (cell.id == state.current and CURRENT or BACKGROUND)
+    pcall(function() cell.background.colour = colour(c) end)
+end
+
+-- A head clicked: it becomes the one in use, and the cells show which. (The window stays open.)
 local function pick(npcID)
     if state == nil then return end
-    closeNext = true
+    state.current = npcID
     pcall(state.onPick, npcID)
+    for _, cell in ipairs(state.cells) do paint(cell, cell.id == npcID) end
 end
 
 -- The window's size, handed on to Variants.onResized (to be remembered), if it can be read.
@@ -135,14 +142,12 @@ end
 
 local function makeCell(index, npcID)
     local content = state.window.content
-    local cell = { index = index }
+    local cell = { index = index, id = npcID }
     state.cells[#state.cells + 1] = cell
-    local base = npcID == state.current and CURRENT or BACKGROUND
     local isPlayer = npcID == Variants.PLAYER
 
     cell.background = ui.Rectangle.new(content)
     cell.background.fill = true
-    cell.background.colour = colour(base)
     cell.background.clickthrough = true
 
     cell.model = ui.Model.new(content)
@@ -170,15 +175,10 @@ local function makeCell(index, npcID)
     -- Over the rest, taking the click. (One handler per hook: a second default Subscribe replaces the first.)
     cell.click = ui.Layer.new(content)
     cell.click.clickthrough = false
-    cell.click:Subscribe(ui.Hook.ONMOUSEOVER, function()
-        pcall(function() cell.background.colour = colour(HOVER) end)
-    end)
-    cell.click:Subscribe(ui.Hook.ONMOUSELEAVE, function()
-        pcall(function() cell.background.colour = colour(base) end)
-    end)
-    cell.click:Subscribe(ui.Hook.ONCLICK, function()
-        pick(npcID)
-    end)
+    cell.click:Subscribe(ui.Hook.ONMOUSEOVER, function() paint(cell, true) end)
+    cell.click:Subscribe(ui.Hook.ONMOUSELEAVE, function() paint(cell, false) end)
+    cell.click:Subscribe(ui.Hook.ONCLICK, function() pick(npcID) end)
+    paint(cell, false)
 end
 
 local function showPage()
@@ -223,7 +223,7 @@ function Variants.isOpen()
 end
 
 -- Opens the window in `parent` for these NPC ids. current: the id active now (highlighted).
--- onPick(npcID) is called when a head is clicked; the window then closes itself. labelFor(npcID), if given,
+-- onPick(npcID) is called when a head is clicked (the window stays open, the head in use highlighted). labelFor(npcID), if given,
 -- is the name shown under each head.
 function Variants.open(PrettyUI, parent, title, ids, current, onPick, labelFor)
     if state ~= nil then Variants.close() end
@@ -243,18 +243,20 @@ function Variants.open(PrettyUI, parent, title, ids, current, onPick, labelFor)
     local y = math.max(0, math.floor((parent.height - height) / 2))
     state = { ids = ids, page = 1, pages = math.max(1, math.ceil(#ids / PAGE_SIZE)), current = current,
         onPick = onPick, labelFor = labelFor, cells = {}, nav = { buttons = {} } }
-    closeNext, turnBy = false, 0
+    turnBy = 0
     local mine = state
     local ok, err = pcall(function()
         mine.window = PrettyUI.Window.new(parent, {
             title = title, x = x, y = y, width = width, height = height,
             minWidth = math.min(minWidth, width), minHeight = math.min(minHeight, height),
             resizable = true, scrollable = false, destroyOnClose = true,
-            -- Closed with its X: the window destroys itself.
+            -- Closed with its X: the window destroys itself; the heads (models) in it are destroyed here, and what
+            -- the window held is let go.
             onClose = function()
                 if state == mine then
                     reportSize(mine)
-                    state, closeNext = nil, false
+                    destroyCells()
+                    state, turnBy = nil, 0
                 end
             end,
         })
@@ -288,16 +290,12 @@ function Variants.close()
     local window = state.window
     reportSize(state)
     destroyCells()
-    state, closeNext, turnBy = nil, false, 0
+    state, turnBy = nil, 0
     pcall(function() window:Destroy() end)
 end
 
--- Every frame: closes the window after a pick, turns the page, and fits the cells to the window's size.
+-- Every frame: turns the page, and fits the cells to the window's size.
 function Variants.tick()
-    if closeNext then
-        Variants.close()
-        return
-    end
     applyTurn()
     if state ~= nil and state.window ~= nil then
         local ok, width, height = pcall(function()

@@ -258,10 +258,12 @@ function HeadGallery.open(PrettyUI, parent, heads, current, onPick, nameOf)
             title = "All heads", x = x, y = y, width = width, height = height,
             minWidth = math.min(minWidth, width), minHeight = math.min(minHeight, height),
             resizable = true, scrollable = false, destroyOnClose = true,
-            -- Closed with its X: the window destroys itself.
+            -- Closed with its X: the window destroys itself; the heads (models) in it are destroyed here, and what
+            -- the window held is let go.
             onClose = function()
                 if state == mine then
                     reportSize(mine)
+                    destroyCells()
                     state = nil
                 end
             end,

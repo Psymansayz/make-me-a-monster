@@ -252,7 +252,12 @@ function HeadBrowser.open(PrettyUI, parent, heads, nameOf, animFor, options)
             title = options.title or "Debug: all heads (click one to flag it for the blacklist)", x = x, y = y, width = width, height = height,
             minWidth = math.min(minWidth, width), minHeight = math.min(minHeight, height),
             resizable = true, scrollable = false, destroyOnClose = true,
-            onClose = function() if state == mine then state = nil end end,
+            onClose = function()
+                if state == mine then
+                    destroyCells()
+                    state = nil
+                end
+            end,
         })
     end)
     if not ok then

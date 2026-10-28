@@ -385,10 +385,7 @@ local function finalizeGroups()
 end
 
 -- The heads the plugin lists, one per id (those left after the filtering), in name order.
-local listedCache = nil
-
 local function listedHeads()
-    if listedCache ~= nil then return listedCache end
     local heads = {}
     for _, group in ipairs(Npcs.groups) do
         for _, npcID in ipairs(visibleIds(group)) do heads[#heads + 1] = npcID end
@@ -399,7 +396,6 @@ local function listedHeads()
         if lowered[a] ~= lowered[b] then return lowered[a] < lowered[b] end
         return a < b
     end)
-    listedCache = heads
     return heads
 end
 
