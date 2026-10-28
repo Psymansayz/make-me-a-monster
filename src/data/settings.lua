@@ -3,8 +3,6 @@
 
 local Settings = {}
 
-local OLD_KEY = "chosen_npc" -- how the settings were saved before: one table
-
 Settings.npcID = nil -- the NPC whose head replaces the player's, or nil for none
 Settings.animID = nil     -- the chat animation last seen on a real NPC's head (learned), or nil
 Settings.animOverride = nil -- the animation picked from the animation dropdown, or nil
@@ -20,23 +18,7 @@ local function saved(key)
     return value ~= nil and value >= 0 and value or nil
 end
 
--- The settings saved in the old way (one table), saved the new way, if there are no new ones yet.
-local function migrate()
-    local old = PersistentDB:GetStructuredData(OLD_KEY)
-    if old == nil or PersistentDB:GetInt("npcID") ~= nil then return end
-    local function whole(value) return value ~= nil and value >= 0 and math.floor(value) or -1 end
-    PersistentDB:SetInt("npcID", whole(old.npcID))
-    PersistentDB:SetInt("animID", whole(old.animID))
-    PersistentDB:SetInt("animOverride", whole(old.animOverride))
-    PersistentDB:SetInt("headScale", whole(old.headScale))
-    PersistentDB:SetInt("variantsWidth", whole(old.variantsWidth))
-    PersistentDB:SetInt("variantsHeight", whole(old.variantsHeight))
-    PersistentDB:SetInt("galleryWidth", whole(old.galleryWidth))
-    PersistentDB:SetInt("galleryHeight", whole(old.galleryHeight))
-end
-
 function Settings.load()
-    migrate()
     Settings.npcID = saved("npcID")
     Settings.animID = saved("animID")
     Settings.animOverride = saved("animOverride")
