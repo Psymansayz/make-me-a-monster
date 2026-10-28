@@ -83,25 +83,58 @@ local shownAnimations = {} -- entry id -> the animation the animation dropdown l
 local refreshing = false
 local refreshingAnimations = false
 
--- Workaround: a dropdown always shows one of its entries, and unselecting leaves its text as it was. So a
--- dropdown with no choice of ours to show has its text made invisible (as read_later does for its books
--- dropdown, see its titleCover): the box's colours, alpha and shadow. The player clicking it open puts them
--- back, and so does it being given a choice to show. (Not on its change events: it can send those on its own
--- after its list is given.)
-local covers = {} -- dropdown -> its text's saved colours, while hidden
+-- Workaround: a dropdown always shows one of its entries, and unselecting or selecting from code doesn't change its
+-- text reliably. So a dropdown's closed box is covered (as read_later does for its books dropdown, see its
+-- titleCover): its own text is made invisible (the box's colours, alpha and shadow), and with a title given a label of
+-- ours with that title is laid over it; with none the box is blank. The player clicking it open puts it back as it
+-- was, and so does it being given a choice to show. (Not on its change events: it can send those on its own after
+-- its list is given.)
+local covers = {} -- dropdown -> { colours = its text's saved colours, covered = whether it is covered now, label = our label }
 
-local function setCover(combo, hidden)
+-- title: the text to show in the covered box, or nil for a blank one.
+local function setCover(combo, hidden, title)
     pcall(function()
         local root = combo.root
-        local saved = covers[combo]
+        local cover = covers[combo]
+        if cover == nil then
+            cover = { covered = false }
+            covers[combo] = cover
+        end
         if hidden then
-            if saved ~= nil then return end
-            covers[combo] = { root.entryText.rgba, root.selectedForegroundRGBA, root.mouseoverForegroundRGBA,
-                alpha = root.entryText.alpha, isShadowed = root.entryText.isShadowed }
-            root.entryText.rgba, root.selectedForegroundRGBA, root.mouseoverForegroundRGBA = 0, 0, 0
-            root.entryText.alpha, root.entryText.isShadowed = 0, false
-        elseif saved ~= nil then
-            covers[combo] = nil
+            if not cover.covered then
+                cover.colours = { root.entryText.rgba, root.selectedForegroundRGBA, root.mouseoverForegroundRGBA,
+                    alpha = root.entryText.alpha, isShadowed = root.entryText.isShadowed }
+                cover.covered = true
+                root.entryText.rgba, root.selectedForegroundRGBA, root.mouseoverForegroundRGBA = 0, 0, 0
+                root.entryText.alpha, root.entryText.isShadowed = 0, false
+            end
+            if title == nil then
+                if cover.label ~= nil then cover.label.hidden = true end
+                return
+            end
+            local label = cover.label
+            if label == nil then
+                label = ui.Text.new(root.parent)
+                label.clickthrough = true
+                label.maxLines = 1
+                label.alignHorizontal = ui.AlignMode.TOPLEFT
+                label.alignVertical = ui.AlignMode.CENTRE
+                cover.label = label
+            end
+            -- Where the box's own text goes: its 8 inset at the left, clear of its arrow button (as wide as the box
+            -- is high) at the right; in its font and colour.
+            label:SetPos(root.x + 8, root.y)
+            label:SetSize(math.max(1, root.width - 8 - root.height), root.height)
+            label.font = root.entryText.font
+            label.rgba = cover.colours[1]
+            label.isShadowed = cover.colours.isShadowed
+            label.content = title
+            label.hidden = false
+            label:MoveToFront()
+        elseif cover.covered then
+            local saved = cover.colours
+            cover.covered = false
+            if cover.label ~= nil then cover.label.hidden = true end
             root.entryText.rgba, root.selectedForegroundRGBA, root.mouseoverForegroundRGBA = saved[1], saved[2], saved[3]
             root.entryText.alpha, root.entryText.isShadowed = saved.alpha, saved.isShadowed
         end
@@ -194,7 +227,9 @@ local function refreshAnimations()
     refreshingAnimations = true
     pcall(function() page.animCombo:SetEntries(entries, selected) end)
     refreshingAnimations = false
-    setCover(page.animCombo, selected == nil)
+    -- (a blank box with nothing chosen, else our label with its name: the dropdown's own text doesn't follow a choice made
+    -- by the plugin)
+    setCover(page.animCombo, true, selected ~= nil and shownAnimations[selected].label or nil)
 end
 
 -- The dropdown refilled with the NPCs matching the search box.
