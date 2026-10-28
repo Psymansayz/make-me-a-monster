@@ -6,7 +6,6 @@ local Npcs = require("src/game/npcs")
 local HeadSwap = require("src/game/head_swap")
 local Variants = require("src/ui/variants")
 local HeadGallery = require("src/ui/head_gallery")
-local HeadFilter = require("src/game/head_filter")
 local Anims = require("src/game/anims")
 
 local PrettyUI = prettyui
@@ -16,11 +15,14 @@ local PrettyUI = prettyui
 local DEBUG_HEAD_BROWSER = true
 local HeadBrowser = require("src/debug/head_browser")
 
--- The ids of an NPC group worth showing (see HeadFilter.variants), worked out once per group (again if the
--- group has gained ids since: the NPCs are still being read).
+-- The ids of an NPC group worth showing. With the saved list (src/data/heads.lua) they are all its ids. Without it
+-- (development: the file is made from a scan, see finalizeGroups) they are worked out once per group by
+-- HeadFilter.variants (again if the group has gained ids since: the NPCs are still being read).
 local visibleByGroup = {}
 
 local function visibleIds(group)
+    if Npcs.baked then return group.ids end
+    local HeadFilter = require("src/game/head_filter")
     local cached = visibleByGroup[group]
     if cached == nil or cached.count ~= #group.ids then
         cached = { count = #group.ids, ids = HeadFilter.variants(group.ids) }
@@ -122,10 +124,10 @@ end
 local function statusText()
     local npcID = Settings.npcID
     if npcID == nil then return "Current chathead: my own head" end
-    local npc = Npcs.find(npcID)
+    local name = Npcs.nameOf(npcID)
     local group = Npcs.groupOf(npcID)
     local variant = group and #group.ids > 1 and (" (variant ID " .. npcID .. ")") or ""
-    return "Current chathead: " .. (npc and npc.name or ("NPC " .. npcID)) .. variant
+    return "Current chathead: " .. (name or ("NPC " .. npcID)) .. variant
 end
 
 local function animStatusText()
@@ -260,7 +262,7 @@ openVariants = function()
                 Variants.open(PrettyUI, parent, "My head", { Variants.PLAYER }, Variants.PLAYER, picked)
             else
                 -- Variants with no head, and ones that look like another, are left out.
-                local ids = HeadFilter.variants(group.ids)
+                local ids = visibleIds(group)
                 if #ids == 0 then ids = group.ids end
                 Variants.open(PrettyUI, parent, group.name .. " variants", ids, Settings.npcID, picked, Npcs.nameOf)
             end
@@ -274,6 +276,9 @@ end
 -- The plugin's page in the client's Plugins window.
 local function buildPage(parent)
     engaged = true
+    -- The saved list of heads, if there is one: no scan.
+    local okList, saved = pcall(require, "src/data/heads")
+    if okList and type(saved) == "table" and not Npcs.baked then Npcs.loadBaked(saved) end
     pcall(Anims.load) -- (about a hundred lookups: the animation dropdown needs them)
     local view = PrettyUI.SimpleView.new(parent, { width = parent.width, height = parent.height })
     view:AddTitle("Make Me A Monster")
@@ -354,6 +359,7 @@ local finalState = nil
 local CHECK_PER_FRAME = 200
 
 local function finalizeGroups()
+    if Npcs.baked then return end
     if finalState == nil then
         if not Npcs.done then return end
         finalState = { index = 1 }
@@ -363,6 +369,11 @@ local function finalizeGroups()
         local group = Npcs.groups[finalState.index]
         if group == nil then
             Npcs.regroup(function(entry) return #visibleIds(entry) > 0 end)
+            -- Development: the list of heads to save as src/data/heads.lua, logged once.
+            local lines, heads = Npcs.exportLines(visibleIds)
+            print(("[make_me_a_monster] HEADS|begin|%d entries, %d heads, %d lines"):format(#Npcs.groups, heads, #lines))
+            for _, line in ipairs(lines) do print(line) end
+            print("[make_me_a_monster] HEADS|end")
             refreshResults()
             refreshStatus()
             finalState.done = true
@@ -374,7 +385,10 @@ local function finalizeGroups()
 end
 
 -- The heads the plugin lists, one per id (those left after the filtering), in name order.
+local listedCache = nil
+
 local function listedHeads()
+    if listedCache ~= nil then return listedCache end
     local heads = {}
     for _, group in ipairs(Npcs.groups) do
         for _, npcID in ipairs(visibleIds(group)) do heads[#heads + 1] = npcID end
@@ -385,6 +399,7 @@ local function listedHeads()
         if lowered[a] ~= lowered[b] then return lowered[a] < lowered[b] end
         return a < b
     end)
+    listedCache = heads
     return heads
 end
 

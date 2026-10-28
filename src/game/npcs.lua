@@ -146,6 +146,76 @@ function Npcs.step()
     end
 end
 
+-- The entries and heads listed, as saved in src/data/heads.lua (made from a scan by Npcs.exportLines): no scan, no
+-- head checks. NPCs added to the game later are not listed until that file is made again.
+-- data.groups = { { name, members = { { name, { id... } }... } }... }. Nothing is looked up in the game.
+function Npcs.loadBaked(data)
+    Npcs.groups, groupOfID, idName = {}, {}, {}
+    for _, saved in ipairs(data.groups or {}) do
+        local ids, members = {}, {}
+        for _, member in ipairs(saved.members) do
+            members[#members + 1] = { name = member[1], ids = member[2] }
+            for _, npcID in ipairs(member[2]) do
+                ids[#ids + 1] = npcID
+                idName[npcID] = member[1]
+            end
+        end
+        table.sort(ids)
+        local group = { name = saved.name, ids = ids, members = members } -- (its search text is made when searched)
+        Npcs.groups[#Npcs.groups + 1] = group
+        for _, npcID in ipairs(ids) do groupOfID[npcID] = group end
+    end
+    Npcs.baked, Npcs.done, Npcs.regrouped = true, true, true
+end
+
+-- The text a search looks in for a group: its names (as they are and with plain letters) and ids.
+local function searchOf(group)
+    if group.search == nil then
+        local parts = {}
+        for _, member in ipairs(group.members) do
+            parts[#parts + 1] = Npcs.searchText(member.name) .. " " .. table.concat(member.ids, " ")
+        end
+        group.search = table.concat(parts, " ")
+    end
+    return group.search
+end
+
+-- Development: the lines to log once a scan has been merged into entries (visibleIds(group) = the ids worth showing),
+-- from which src/data/heads.lua is made: "HEADS|<n>/<of>|<records>", a record being
+-- "<entry name>=<member name>:<id>,<id>;<member name>:..." and records joined by "~". (Names hold no | ~ = : ; ,.)
+function Npcs.exportLines(visibleIds, maxLength)
+    maxLength = maxLength or 900
+    local chunks, current, length, heads = {}, {}, 0, 0
+    for _, group in ipairs(Npcs.groups) do
+        local shown = {}
+        for _, npcID in ipairs(visibleIds(group)) do shown[npcID] = true end
+        local members = {}
+        for _, member in ipairs(group.members or { { name = group.name, ids = group.ids } }) do
+            local ids = {}
+            for _, npcID in ipairs(member.ids) do
+                if shown[npcID] then ids[#ids + 1] = npcID end
+            end
+            if #ids > 0 then
+                heads = heads + #ids
+                members[#members + 1] = member.name .. ":" .. table.concat(ids, ",")
+            end
+        end
+        if #members > 0 then
+            local record = group.name .. "=" .. table.concat(members, ";")
+            if length > 0 and length + #record > maxLength then
+                chunks[#chunks + 1] = table.concat(current, "~")
+                current, length = {}, 0
+            end
+            current[#current + 1] = record
+            length = length + #record + 1
+        end
+    end
+    if #current > 0 then chunks[#chunks + 1] = table.concat(current, "~") end
+    local lines = {}
+    for index, chunk in ipairs(chunks) do lines[index] = ("HEADS|%d/%d|%s"):format(index, #chunks, chunk) end
+    return lines, heads
+end
+
 -- The NPC with this id, or nil.
 function Npcs.find(npcID)
     for _, npc in ipairs(Npcs.list) do
@@ -371,7 +441,7 @@ function Npcs.search(query, limit, visibleIds)
         for _, word in ipairs(words) do
             -- (the group's search text holds the name as it is and with its letters beyond ASCII made plain: a
             -- plain word finds either, one with such a letter only the name that has it)
-            if not group.search:find(word, 1, true) then matches = false break end
+            if not searchOf(group):find(word, 1, true) then matches = false break end
         end
         if matches and (visibleIds == nil or #visibleIds(group) > 0) then
             found[#found + 1] = group
