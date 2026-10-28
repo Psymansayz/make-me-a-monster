@@ -39,6 +39,11 @@ function Anims.step()
     end
 end
 
+-- Looks up all of them now (there are about a hundred), for what needs the list before the page has read it.
+function Anims.load()
+    while not Anims.done do Anims.step() end
+end
+
 -- The animation with this id, or nil.
 function Anims.find(animID)
     for _, anim in ipairs(Anims.list) do
@@ -185,6 +190,7 @@ local chatheadCache = {} -- prefix -> { count = animations read when made, list 
 -- The label is the name without the prefix and without the endings _LEN<n>, _LEN_ALL and _LOOP; names
 -- ending _LEN2 or more (longer takes of the same animation) are left out.
 function Anims.chatheads(prefix)
+    Anims.load()
     local cached = chatheadCache[prefix]
     if cached ~= nil and cached.count == #Anims.list then return cached.list end
     local found, byLabel = {}, {}

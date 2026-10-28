@@ -66,6 +66,10 @@ Variants.scaleFor = function() return HeadSwap.scale end
 HeadGallery.scaleFor = Variants.scaleFor
 HeadSwap.onLearned = function(animID) Settings.setAnim(animID) end
 
+-- Nothing is read from the game (its NPCs, their heads, the animations) until the plugin page is first opened:
+-- the head in dialogue needs only the saved NPC id.
+local engaged = false
+
 local page = nil -- the plugin page's controls: { view, search, combo, status, progress }
 local shownGroups = {} -- entry id -> the group (every NPC of one name) the dropdown lists now
 local shownAnimations = {} -- entry id -> the animation the animation dropdown lists
@@ -269,6 +273,8 @@ end
 
 -- The plugin's page in the client's Plugins window.
 local function buildPage(parent)
+    engaged = true
+    pcall(Anims.load) -- (about a hundred lookups: the animation dropdown needs them)
     local view = PrettyUI.SimpleView.new(parent, { width = parent.width, height = parent.height })
     view:AddTitle("Make Me A Monster")
     view:AddText("Pick an NPC: its head replaces yours in dialogue boxes.")
@@ -501,7 +507,7 @@ end
 
 local frames = 0
 Event.Draw.Subscribe("make_me_a_monster_draw", function()
-    if not Npcs.done then
+    if engaged and not Npcs.done then
         local ok, err = pcall(Npcs.step)
         if not ok then print("[make_me_a_monster] NPC scan error: " .. tostring(err)) Npcs.done = true end
         frames = frames + 1
@@ -510,15 +516,7 @@ Event.Draw.Subscribe("make_me_a_monster_draw", function()
             refreshStatus()
         end
     end
-    if not Anims.done then
-        local okScan, errScan = pcall(Anims.step)
-        if not okScan then print("[make_me_a_monster] animation scan error: " .. tostring(errScan)) Anims.done = true end
-        if Anims.done then
-            refreshAnimations()
-            refreshStatus()
-        end
-    end
-    pcall(finalizeGroups)
+    if engaged then pcall(finalizeGroups) end
     pcall(Variants.tick)
     pcall(HeadGallery.tick)
     if DEBUG_HEAD_BROWSER then

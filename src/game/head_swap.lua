@@ -122,8 +122,15 @@ function HeadSwap.animate(component)
     if anim ~= nil and component.animID ~= anim then component.animID = anim end
 end
 
+-- Whether an interface is open now (a cheap check, so a closed box costs nothing each frame).
+local function isOpen(interface)
+    local ok, opened = pcall(function() return ui.Interfaces:GetInterface(interface) ~= nil end)
+    return ok and opened
+end
+
 -- Notes the animation of the NPC speech box's head, for the swapped head to use.
 local function learn()
+    if not isOpen(NPC_BOX) then return end
     local statics = modelStatics(NPC_BOX)
     if statics == nil then return end
     for _, staticID in ipairs(statics) do
@@ -204,12 +211,13 @@ end
 
 -- Every frame.
 function HeadSwap.tick()
-    pcall(learn)
     local npcID = HeadSwap.npcID
+    if npcID ~= nil then pcall(learn) end -- (the NPC's own animation is only used with an NPC's head)
     -- (nothing to do with no NPC, no animation chosen, normal size and no size left to put back)
     if npcID == nil and HeadSwap.animOverride == nil and HeadSwap.scale <= 1 and next(scaled) == nil then return end
     for _, interface in ipairs(INTERFACES) do
-        local ok, statics = pcall(modelStatics, interface)
+        local ok, statics = false, nil
+        if isOpen(interface) then ok, statics = pcall(modelStatics, interface) end
         if ok and statics ~= nil then
             for _, staticID in ipairs(statics) do
                 pcall(function()
