@@ -95,9 +95,19 @@ function HeadSwap.ownHeadAnim(withNeutral)
     return PlayerAnims.twin[chosen] or chosen
 end
 
+-- The listed animation that has this player animation as its twin (the lowest id if several), or nil.
+local function npcTwinOf(actorID)
+    if PlayerAnims.alsoFor[actorID] ~= nil then return PlayerAnims.alsoFor[actorID] end
+    local best = nil
+    for npcAnim, twinID in pairs(PlayerAnims.twin) do
+        if twinID == actorID and (best == nil or npcAnim < best) then best = npcAnim end
+    end
+    return best
+end
+
 -- The animation to keep when the head changes between the player's own and an NPC's, which play different
--- animations: for the player's own head the twin of an NPC animation, or evil laugh if it has none (an animation
--- for the player's head stays); for an NPC head the animation that has this one as its twin, or nil if none.
+-- animations: for the player's own head the twin of an NPC animation; for an NPC head the animation that has this
+-- one as its twin. Where there is none, evil laugh (of the kind the head plays).
 function HeadSwap.animForHead(animID, ownHead)
     if animID == nil then return nil end
     local isPlayers = false
@@ -109,12 +119,7 @@ function HeadSwap.animForHead(animID, ownHead)
         return PlayerAnims.twin[animID] or PlayerAnims.fallback
     end
     if not isPlayers then return animID end
-    if PlayerAnims.alsoFor[animID] ~= nil then return PlayerAnims.alsoFor[animID] end
-    local best = nil
-    for npcAnim, actorID in pairs(PlayerAnims.twin) do
-        if actorID == animID and (best == nil or npcAnim < best) then best = npcAnim end
-    end
-    return best
+    return npcTwinOf(animID) or npcTwinOf(PlayerAnims.fallback)
 end
 
 function HeadSwap.animate(component)
