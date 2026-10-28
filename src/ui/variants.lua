@@ -38,10 +38,6 @@ local TEXT_LIGHT = 0xE9E5DDFF
 
 local state = nil -- { window, ids, page, pages, current, onPick, labelFor, cells, nav, layoutW, layoutH }
 
-local function log(message)
-    print("[make_me_a_monster] " .. message)
-end
-
 local function colour(c) return Vector4.new(c[1], c[2], c[3], c[4]) end
 
 local function destroyCells()
@@ -208,8 +204,7 @@ local function showPage()
     if not state.cellsMade then
         state.cellsMade = true
         for index = 1, PAGE_SIZE do
-            local ok, err = pcall(makeCell, index)
-            if not ok then log("could not make a variant cell: " .. tostring(err)) end
+            pcall(makeCell, index)
         end
     end
     local first = (state.page - 1) * PAGE_SIZE
@@ -218,8 +213,7 @@ local function showPage()
         if npcID == nil then
             emptyCell(cell)
         else
-            local ok, err = pcall(fillCell, cell, npcID)
-            if not ok then log("could not fill a variant cell: " .. tostring(err)) end
+            pcall(fillCell, cell, npcID)
         end
     end
     pcall(function()
@@ -314,11 +308,10 @@ function Variants.open(PrettyUI, parent, title, ids, current, onPick, labelFor)
     end)
     if not ok then
         state = nil
-        print("[make_me_a_monster] could not open the variants window: " .. tostring(err))
         return false
     end
     local content = mine.window.content
-    local okNav, errNav = pcall(function()
+    pcall(function()
         mine.nav.label = ui.Text.new(content)
         mine.nav.label.maxLines = 1
         mine.nav.label.font = id.Font.MUSEO_SANS_11PT_REGULAR
@@ -331,7 +324,6 @@ function Variants.open(PrettyUI, parent, title, ids, current, onPick, labelFor)
             { x = PAD, y = 0, width = NAV_BUTTON })
         mine.nav.buttons = { previous, after }
     end)
-    if not okNav then log("could not make the page buttons: " .. tostring(errNav)) end
     showPage()
     return true
 end

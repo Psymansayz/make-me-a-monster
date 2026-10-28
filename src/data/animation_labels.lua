@@ -1,5 +1,4 @@
 -- What the dropdown shows for these animations, by id (in place of their names). Read by src/game/anims.lua.
--- The names: see animation_labels_names.lua (development only).
 return {
     [2601] = "SLUG FEAR",
     [2602] = "SLUG HAPPY",

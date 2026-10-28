@@ -45,7 +45,7 @@ function Settings.load()
 end
 
 local function save()
-    local ok, err = pcall(function()
+    pcall(function()
         PersistentDB:SetStructuredData(KEY, {
             npcID = Settings.npcID or -1, animID = Settings.animID or -1, animOverride = Settings.animOverride or -1,
             headScale = Settings.headScale,
@@ -53,7 +53,6 @@ local function save()
             galleryWidth = Settings.galleryWidth or -1, galleryHeight = Settings.galleryHeight or -1,
         })
     end)
-    if not ok then print("[make_me_a_monster] could not save the settings: " .. tostring(err)) end
 end
 
 -- Written again as it stands (when the game screen is left and on shutdown), in case a write was lost.

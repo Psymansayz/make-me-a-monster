@@ -1,6 +1,5 @@
 -- The animations the plugin lists (config.Seq) as { id, name, label, search }, for finding one by name: just the
--- whitelisted ones (src/data/animation_whitelist.lua), looked up by id a few at a time. Their duplicates (longer
--- takes, loops) are kept apart in the whitelist and are not loaded.
+-- whitelisted ones (src/data/animation_whitelist.lua), looked up by id.
 
 local Whitelist = require("src/data/animation_whitelist")
 local PlayerAnims = require("src/data/player_head_animations")

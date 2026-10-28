@@ -1,8 +1,7 @@
 -- Animations for the player's own head. The animations the plugin lists are for NPC heads (HUMAN_UPDATE_CHATHEAD_...);
 -- the player's head plays the matching HUMAN_ACTOR_CHATHEAD_... ones. Read by src/game/head_swap.lua.
 return {
-    -- A listed animation's id = the id of its player twin (the same emotion and strength; names in
-    -- player_head_animations_names.lua). One with no twin (a non-human animation) is played as it is.
+    -- A listed animation's id = the id of its player twin (the same emotion and strength). One with no twin (a non-human animation) is played as it is.
     twin = {
         [9742] = 37920,
         [9746] = 37921,

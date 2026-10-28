@@ -200,8 +200,7 @@ local function showPage()
     if not state.cellsMade then
         state.cellsMade = true
         for index = 1, PAGE_SIZE do
-            local ok, err = pcall(makeCell, index)
-            if not ok then print("[make_me_a_monster] could not make a head cell: " .. tostring(err)) end
+            pcall(makeCell, index)
         end
     end
     state.page = math.max(1, math.min(state.pages, state.page))
@@ -211,8 +210,7 @@ local function showPage()
         if npcID == nil then
             emptyCell(cell)
         else
-            local ok, err = pcall(fillCell, cell, npcID)
-            if not ok then print("[make_me_a_monster] could not fill a head cell: " .. tostring(err)) end
+            pcall(fillCell, cell, npcID)
         end
     end
     pcall(function()
@@ -324,11 +322,10 @@ function HeadGallery.open(PrettyUI, parent, heads, current, onPick, nameOf)
     end)
     if not ok then
         state = nil
-        print("[make_me_a_monster] could not open the heads window: " .. tostring(err))
         return false
     end
     local content = mine.window.content
-    local okNav, errNav = pcall(function()
+    pcall(function()
         local nav = mine.nav
         nav.turn = 0
         -- (no angle brackets in the button text: the game reads "<" as the start of a markup tag)
@@ -347,7 +344,6 @@ function HeadGallery.open(PrettyUI, parent, heads, current, onPick, nameOf)
         nav.label.font = id.Font.MUSEO_SANS_11PT_REGULAR
         nav.label.rgba = TEXT_LIGHT
     end)
-    if not okNav then print("[make_me_a_monster] could not make the heads window's controls: " .. tostring(errNav)) end
     showPage()
     return true
 end
