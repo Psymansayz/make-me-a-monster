@@ -1,0 +1,10 @@
+{
+    "name": "Make Me A Monster",
+    "version": "0.0.1",
+    "contactEmailAddress": "pvpbalaji@gmail.com",
+    "requiredDependencies": { "prettyui": 6398181 },
+    "optionalDependencies": {},
+    "requiredPermissions": [],
+    "optionalPermissions": [],
+    "hasRibbonIcon": true
+}
