@@ -48,7 +48,7 @@ local function destroyCells()
     for _, cell in ipairs(state.cells) do
         pcall(function() cell.click:Destroy() end)
         pcall(function() cell.label:Destroy() end)
-        pcall(function() if cell.idLabel then cell.idLabel:Destroy() end end)
+        pcall(function() cell.idLabel:Destroy() end)
         pcall(function() cell.model:Destroy() end)
         pcall(function() cell.background:Destroy() end)
     end
@@ -140,11 +140,19 @@ local function layout()
     placeNav(g)
 end
 
-local function makeCell(index, npcID)
+-- A cell shown or hidden (all its parts).
+local function setHidden(cell, hidden)
+    for _, part in ipairs({ cell.background, cell.model, cell.name, cell.idLabel, cell.click }) do
+        pcall(function() part.hidden = hidden end)
+    end
+end
+
+-- One of the window's PAGE_SIZE cells, made once when the window opens and used for every page (see
+-- src/ui/head_gallery.lua). Empty until fillCell.
+local function makeCell(index)
     local content = state.window.content
-    local cell = { index = index, id = npcID }
+    local cell = { index = index }
     state.cells[#state.cells + 1] = cell
-    local isPlayer = npcID == Variants.PLAYER
 
     cell.background = ui.Rectangle.new(content)
     cell.background.fill = true
@@ -152,13 +160,7 @@ local function makeCell(index, npcID)
 
     cell.model = ui.Model.new(content)
     cell.model.clickthrough = true
-    cell.model:SetModel(isPlayer and ui.ModelType.PLAYER_HEAD or ui.ModelType.NPC_HEAD, npcID)
-    local animFor = isPlayer and Variants.animForPlayer or Variants.animFor
-    local anim = animFor and animFor() or nil
-    if anim ~= nil then cell.model.animID = anim end
 
-    -- The NPC's name, if it is told (an entry can hold several names), above its id.
-    local nameText = (not isPlayer and state.labelFor) and state.labelFor(npcID) or nil
     local function text(line)
         local label = ui.Text.new(content)
         label.maxLines = 1
@@ -169,26 +171,56 @@ local function makeCell(index, npcID)
         label.content = line
         return label
     end
-    cell.label = text(isPlayer and "My head" or (nameText or ("ID " .. npcID)))
-    if nameText then cell.idLabel = text("ID " .. npcID) end
+    cell.label = text("")
+    cell.idLabel = text("")
 
     -- Over the rest, taking the click. (One handler per hook: a second default Subscribe replaces the first.)
     cell.click = ui.Layer.new(content)
     cell.click.clickthrough = false
     cell.click:Subscribe(ui.Hook.ONMOUSEOVER, function() paint(cell, true) end)
     cell.click:Subscribe(ui.Hook.ONMOUSELEAVE, function() paint(cell, false) end)
-    cell.click:Subscribe(ui.Hook.ONCLICK, function() pick(npcID) end)
+    cell.click:Subscribe(ui.Hook.ONCLICK, function() if cell.id ~= nil then pick(cell.id) end end)
+    setHidden(cell, true)
+end
+
+-- The cell showing this head (npcID, or Variants.PLAYER for the player's own).
+local function fillCell(cell, npcID)
+    cell.id = npcID
+    local isPlayer = npcID == Variants.PLAYER
+    cell.model:SetModel(isPlayer and ui.ModelType.PLAYER_HEAD or ui.ModelType.NPC_HEAD, npcID)
+    local animFor = isPlayer and Variants.animForPlayer or Variants.animFor
+    local anim = animFor and animFor() or nil
+    if anim ~= nil then cell.model.animID = anim end
+    -- The NPC's name, if it is told (an entry can hold several names), above its id.
+    local nameText = (not isPlayer and state.labelFor) and state.labelFor(npcID) or nil
+    cell.label.content = isPlayer and "My head" or (nameText or ("ID " .. npcID))
+    cell.idLabel.content = nameText and ("ID " .. npcID) or ""
+    setHidden(cell, false)
     paint(cell, false)
 end
 
+local function emptyCell(cell)
+    cell.id = nil
+    setHidden(cell, true)
+end
+
 local function showPage()
-    destroyCells()
+    if not state.cellsMade then
+        state.cellsMade = true
+        for index = 1, PAGE_SIZE do
+            local ok, err = pcall(makeCell, index)
+            if not ok then log("could not make a variant cell: " .. tostring(err)) end
+        end
+    end
     local first = (state.page - 1) * PAGE_SIZE
-    for index = 1, PAGE_SIZE do
-        local npcID = state.ids[first + index]
-        if npcID == nil then break end
-        local ok, err = pcall(makeCell, index, npcID)
-        if not ok then log("could not make a variant cell: " .. tostring(err)) end
+    for _, cell in ipairs(state.cells) do
+        local npcID = state.ids[first + cell.index]
+        if npcID == nil then
+            emptyCell(cell)
+        else
+            local ok, err = pcall(fillCell, cell, npcID)
+            if not ok then log("could not fill a variant cell: " .. tostring(err)) end
+        end
     end
     pcall(function()
         state.nav.label.content = "Page " .. state.page .. " of " .. state.pages .. " (" .. #state.ids .. " variants)"

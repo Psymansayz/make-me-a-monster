@@ -133,9 +133,19 @@ local function layout()
     placeNav(g)
 end
 
-local function makeCell(index, npcID)
+-- A cell shown or hidden (all its parts).
+local function setHidden(cell, hidden)
+    for _, part in ipairs({ cell.background, cell.model, cell.name, cell.idLabel, cell.click }) do
+        pcall(function() part.hidden = hidden end)
+    end
+end
+
+-- One of the window's PAGE_SIZE cells, made once when the window opens and used for every page (a page change
+-- gives the cells other heads, it doesn't make and destroy components: that built up while paging, and the
+-- client was slow to let go of them). Empty until fillCell.
+local function makeCell(index)
     local content = state.window.content
-    local cell = { index = index, id = npcID }
+    local cell = { index = index }
     state.cells[#state.cells + 1] = cell
 
     cell.background = ui.Rectangle.new(content)
@@ -144,9 +154,6 @@ local function makeCell(index, npcID)
 
     cell.model = ui.Model.new(content)
     cell.model.clickthrough = true
-    cell.model:SetModel(ui.ModelType.NPC_HEAD, npcID)
-    local anim = HeadGallery.animFor and HeadGallery.animFor() or nil
-    if anim ~= nil then cell.model.animID = anim end
 
     local function text(line)
         local label = ui.Text.new(content)
@@ -158,27 +165,54 @@ local function makeCell(index, npcID)
         label.content = line
         return label
     end
-    cell.name = text(state.nameOf(npcID) or "?")
-    cell.idLabel = text("ID " .. npcID)
+    cell.name = text("")
+    cell.idLabel = text("")
 
     -- Over the rest, taking the click. (One handler per hook: a second default Subscribe replaces the first.)
     cell.click = ui.Layer.new(content)
     cell.click.clickthrough = false
     cell.click:Subscribe(ui.Hook.ONMOUSEOVER, function() paint(cell, true) end)
     cell.click:Subscribe(ui.Hook.ONMOUSELEAVE, function() paint(cell, false) end)
-    cell.click:Subscribe(ui.Hook.ONCLICK, function() pick(npcID) end)
+    cell.click:Subscribe(ui.Hook.ONCLICK, function() if cell.id ~= nil then pick(cell.id) end end)
+    setHidden(cell, true)
+end
+
+-- The cell showing this head.
+local function fillCell(cell, npcID)
+    cell.id = npcID
+    cell.model:SetModel(ui.ModelType.NPC_HEAD, npcID)
+    local anim = HeadGallery.animFor and HeadGallery.animFor() or nil
+    if anim ~= nil then cell.model.animID = anim end
+    cell.name.content = state.nameOf(npcID) or "?"
+    cell.idLabel.content = "ID " .. npcID
+    setHidden(cell, false)
     paint(cell, false)
 end
 
+-- The cell with nothing in it (past the last head of the last page).
+local function emptyCell(cell)
+    cell.id = nil
+    setHidden(cell, true)
+end
+
 local function showPage()
-    destroyCells()
+    if not state.cellsMade then
+        state.cellsMade = true
+        for index = 1, PAGE_SIZE do
+            local ok, err = pcall(makeCell, index)
+            if not ok then print("[make_me_a_monster] could not make a head cell: " .. tostring(err)) end
+        end
+    end
     state.page = math.max(1, math.min(state.pages, state.page))
     local first = (state.page - 1) * PAGE_SIZE
-    for index = 1, PAGE_SIZE do
-        local npcID = state.shown[first + index]
-        if npcID == nil then break end
-        local ok, err = pcall(makeCell, index, npcID)
-        if not ok then print("[make_me_a_monster] could not make a head cell: " .. tostring(err)) end
+    for index, cell in ipairs(state.cells) do
+        local npcID = state.shown[first + cell.index]
+        if npcID == nil then
+            emptyCell(cell)
+        else
+            local ok, err = pcall(fillCell, cell, npcID)
+            if not ok then print("[make_me_a_monster] could not fill a head cell: " .. tostring(err)) end
+        end
     end
     pcall(function()
         state.nav.label.content = ("Page %d of %d (%d heads%s)"):format(
