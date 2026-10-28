@@ -21,6 +21,7 @@ HeadGallery.animFor = nil -- function() -> the animation id the heads should pla
 HeadGallery.scaleFor = nil -- function() -> how many times larger than normal the heads are drawn (the head size setting)
 HeadGallery.savedSize = nil -- { width, height } the window was last left at: it opens at that size
 HeadGallery.onResized = nil -- function(width, height): called when the window closes at a size
+HeadGallery.onClosed = nil -- function(): called when the window has closed, however it was closed
 
 local COLUMNS, ROWS = 5, 4
 local PAGE_SIZE = COLUMNS * ROWS
@@ -260,6 +261,23 @@ function HeadGallery.defaultSize()
         ROWS * START_CELL_H + (ROWS - 1) * GAP + PAD * 2 + NAV_HEIGHT + 4 + TITLE_AND_BOTTOM
 end
 
+-- The heads shown play the animation now wanted (it was changed while the window is open).
+function HeadGallery.updateAnimations()
+    if state == nil then return end
+    local anim = HeadGallery.animFor and HeadGallery.animFor() or nil
+    for _, cell in ipairs(state.cells) do
+        if cell.id ~= nil then
+            pcall(function()
+                if anim ~= nil then
+                    cell.model.animID = anim
+                else
+                    cell.model:SetModel(ui.ModelType.NPC_HEAD, cell.id) -- (no animation: the head as it starts)
+                end
+            end)
+        end
+    end
+end
+
 function HeadGallery.isOpen()
     return state ~= nil
 end
@@ -299,6 +317,7 @@ function HeadGallery.open(PrettyUI, parent, heads, current, onPick, nameOf)
                     reportSize(mine)
                     destroyCells()
                     state = nil
+                    if HeadGallery.onClosed then pcall(HeadGallery.onClosed) end
                 end
             end,
         })
@@ -340,6 +359,7 @@ function HeadGallery.close()
     destroyCells()
     state = nil
     pcall(function() window:Destroy() end)
+    if HeadGallery.onClosed then pcall(HeadGallery.onClosed) end
 end
 
 -- Every frame: does what the buttons and boxes asked for (not inside their own handlers), and fits the cells to the

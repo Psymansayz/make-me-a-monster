@@ -250,6 +250,25 @@ local function applyTurn()
     showPage()
 end
 
+-- The heads shown play the animation now wanted (it was changed while the window is open).
+function Variants.updateAnimations()
+    if state == nil then return end
+    for _, cell in ipairs(state.cells) do
+        if cell.id ~= nil then
+            pcall(function()
+                local isPlayer = cell.id == Variants.PLAYER
+                local animFor = isPlayer and Variants.animForPlayer or Variants.animFor
+                local anim = animFor and animFor() or nil
+                if anim ~= nil then
+                    cell.model.animID = anim
+                else
+                    cell.model:SetModel(isPlayer and ui.ModelType.PLAYER_HEAD or ui.ModelType.NPC_HEAD, cell.id)
+                end
+            end)
+        end
+    end
+end
+
 function Variants.isOpen()
     return state ~= nil
 end

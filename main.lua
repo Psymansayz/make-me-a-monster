@@ -35,6 +35,9 @@ local RESULTS_SHOWN = 40 -- NPCs listed in the dropdown at once (there are tens 
 -- The animation the head plays by the player's choice.
 local function applyAnimChoice()
     HeadSwap.animOverride = Settings.animOverride
+    -- (the heads in the windows open play it too)
+    pcall(HeadGallery.updateAnimations)
+    pcall(Variants.updateAnimations)
 end
 
 -- The saved choices, applied. (Loaded again on entering the game: the saved data may not be readable yet when
@@ -151,6 +154,8 @@ end
 -- between (they play different animations, see HeadSwap.animForHead).
 local function fitAnimToHead()
     if not Anims.done or Settings.animOverride == nil then return end
+    -- (with the player's own head and the heads window open, the animation stays as it is until the window closes)
+    if Settings.npcID == nil and HeadGallery.isOpen() then return end
     local fitted = HeadSwap.animForHead(Settings.animOverride, Settings.npcID == nil)
     if fitted ~= Settings.animOverride then
         Settings.setAnimOverride(fitted)
@@ -168,7 +173,10 @@ local function refreshAnimations()
         applyAnimChoice()
         refreshStatus()
     end
-    local found = Anims.search("", math.huge, Settings.npcID == nil)
+    -- The animations for NPC heads, unless the player's own head is in use and no heads window is open (the heads
+    -- in it are NPC heads, whatever head is in use).
+    local npcHeads = Settings.npcID ~= nil or HeadGallery.isOpen()
+    local found = Anims.search("", math.huge, not npcHeads)
     table.sort(found, function(a, b)
         if a.label ~= b.label then return a.label < b.label end
         return a.id < b.id
@@ -179,7 +187,10 @@ local function refreshAnimations()
         entries[#entries + 1] = { label = anim.label, id = index }
         shownAnimations[index] = anim
     end
-    local selected = selectedEntry(shownAnimations, function(anim) return anim.id == Settings.animOverride end)
+    -- (the one chosen, as its NPC version if it is one for the player's head and the list is of NPC ones)
+    local shownChoice = Settings.animOverride
+    if npcHeads then shownChoice = HeadSwap.animForHead(shownChoice, false) end
+    local selected = selectedEntry(shownAnimations, function(anim) return anim.id == shownChoice end)
     refreshingAnimations = true
     pcall(function() page.animCombo:SetEntries(entries, selected) end)
     refreshingAnimations = false
@@ -401,6 +412,15 @@ local function listedHeads()
     return heads
 end
 
+-- The heads window closed: the dropdown goes back to the animations of the head in use. With the player's own head
+-- in use (no head picked) an NPC animation chosen meanwhile becomes the player's version of it.
+HeadGallery.onClosed = function()
+    fitAnimToHead()
+    applyAnimChoice()
+    refreshAnimations()
+    refreshStatus()
+end
+
 -- Opens the window of every head the plugin lists; a click on one makes it the active head.
 openHeadGallery = function()
     local note = ""
@@ -413,6 +433,7 @@ openHeadGallery = function()
         if ok and parent ~= nil then
             HeadGallery.open(PrettyUI, parent, listedHeads(), Settings.npcID, function(npcID) chooseNpc(npcID) end,
                 Npcs.nameOf)
+            refreshAnimations() -- (the animations for NPC heads, if the player's head is in use)
         else
             note = "The game screen isn't ready."
         end
