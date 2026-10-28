@@ -1,8 +1,9 @@
--- The chosen NPC, saved in PersistentDB (shared by every character on this PC).
+-- The settings, saved in PersistentDB (shared by every character on this PC), each as an integer entry under its
+-- own key. An entry that isn't there reads as nil, which is the default; a setting with nothing chosen is saved as -1.
 
 local Settings = {}
 
-local KEY = "chosen_npc"
+local OLD_KEY = "chosen_npc" -- how the settings were saved before: one table
 
 Settings.npcID = nil -- the NPC whose head replaces the player's, or nil for none
 Settings.animID = nil     -- the chat animation last seen on a real NPC's head (learned), or nil
@@ -13,47 +14,57 @@ Settings.variantsHeight = nil
 Settings.galleryWidth = nil   -- the size the all-heads window was left at, or nil
 Settings.galleryHeight = nil
 
--- Workaround: PersistentDB keeps numbers as 32-bit floats; NPC ids are far below 2^24, so they are exact.
+-- A saved integer that isn't negative, or nil.
+local function saved(key)
+    local value = PersistentDB:GetInt(key)
+    return value ~= nil and value >= 0 and value or nil
+end
+
+-- The settings saved in the old way (one table), saved the new way, if there are no new ones yet.
+local function migrate()
+    local old = PersistentDB:GetStructuredData(OLD_KEY)
+    if old == nil or PersistentDB:GetInt("npcID") ~= nil then return end
+    local function whole(value) return value ~= nil and value >= 0 and math.floor(value) or -1 end
+    PersistentDB:SetInt("npcID", whole(old.npcID))
+    PersistentDB:SetInt("animID", whole(old.animID))
+    PersistentDB:SetInt("animOverride", whole(old.animOverride))
+    PersistentDB:SetInt("headScale", whole(old.headScale))
+    PersistentDB:SetInt("variantsWidth", whole(old.variantsWidth))
+    PersistentDB:SetInt("variantsHeight", whole(old.variantsHeight))
+    PersistentDB:SetInt("galleryWidth", whole(old.galleryWidth))
+    PersistentDB:SetInt("galleryHeight", whole(old.galleryHeight))
+end
+
 function Settings.load()
-    local ok, data = pcall(function() return PersistentDB:GetStructuredData(KEY) end)
-    local id = ok and type(data) == "table" and tonumber(data.npcID) or nil
-    Settings.npcID = id and id >= 0 and math.floor(id) or nil
-    local anim = ok and type(data) == "table" and tonumber(data.animID) or nil
-    Settings.animID = anim and anim >= 0 and math.floor(anim) or nil
-    local override = ok and type(data) == "table" and tonumber(data.animOverride) or nil
-    Settings.animOverride = override and override >= 0 and math.floor(override) or nil
-    -- (an animation saved by the older searchable list stands in if there is no other)
-    local search = ok and type(data) == "table" and tonumber(data.animSearch) or nil
-    if Settings.animOverride == nil and search and search >= 0 then Settings.animOverride = math.floor(search) end
-    local scale = ok and type(data) == "table" and tonumber(data.headScale) or nil
-    Settings.headScale = scale and math.max(100, math.min(300, math.floor(scale + 0.5))) or 100
-    local width = ok and type(data) == "table" and tonumber(data.variantsWidth) or nil
-    local height = ok and type(data) == "table" and tonumber(data.variantsHeight) or nil
+    migrate()
+    Settings.npcID = saved("npcID")
+    Settings.animID = saved("animID")
+    Settings.animOverride = saved("animOverride")
+    local scale = saved("headScale")
+    Settings.headScale = scale and math.max(100, math.min(300, scale)) or 100
+    local width, height = saved("variantsWidth"), saved("variantsHeight")
     if width and height and width > 0 and height > 0 then
-        Settings.variantsWidth, Settings.variantsHeight = math.floor(width), math.floor(height)
+        Settings.variantsWidth, Settings.variantsHeight = width, height
     else
         Settings.variantsWidth, Settings.variantsHeight = nil, nil
     end
-    local galleryWidth = ok and type(data) == "table" and tonumber(data.galleryWidth) or nil
-    local galleryHeight = ok and type(data) == "table" and tonumber(data.galleryHeight) or nil
+    local galleryWidth, galleryHeight = saved("galleryWidth"), saved("galleryHeight")
     if galleryWidth and galleryHeight and galleryWidth > 0 and galleryHeight > 0 then
-        Settings.galleryWidth, Settings.galleryHeight = math.floor(galleryWidth), math.floor(galleryHeight)
+        Settings.galleryWidth, Settings.galleryHeight = galleryWidth, galleryHeight
     else
         Settings.galleryWidth, Settings.galleryHeight = nil, nil
     end
-    return ok and type(data) == "table" -- whether anything was saved
 end
 
 local function save()
-    local ok, err = pcall(function()
-        PersistentDB:SetStructuredData(KEY, {
-            npcID = Settings.npcID or -1, animID = Settings.animID or -1, animOverride = Settings.animOverride or -1,
-            headScale = Settings.headScale,
-            variantsWidth = Settings.variantsWidth or -1, variantsHeight = Settings.variantsHeight or -1,
-            galleryWidth = Settings.galleryWidth or -1, galleryHeight = Settings.galleryHeight or -1,
-        })
-    end)
-    if not ok then print("[make_me_a_monster] could not save the settings: " .. tostring(err)) end
+    PersistentDB:SetInt("npcID", Settings.npcID or -1)
+    PersistentDB:SetInt("animID", Settings.animID or -1)
+    PersistentDB:SetInt("animOverride", Settings.animOverride or -1)
+    PersistentDB:SetInt("headScale", Settings.headScale)
+    PersistentDB:SetInt("variantsWidth", Settings.variantsWidth or -1)
+    PersistentDB:SetInt("variantsHeight", Settings.variantsHeight or -1)
+    PersistentDB:SetInt("galleryWidth", Settings.galleryWidth or -1)
+    PersistentDB:SetInt("galleryHeight", Settings.galleryHeight or -1)
 end
 
 -- Written again as it stands (when the game screen is left and on shutdown), in case a write was lost.
