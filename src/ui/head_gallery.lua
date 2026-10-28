@@ -255,7 +255,7 @@ function HeadGallery.open(PrettyUI, parent, heads, current, onPick, nameOf)
     local mine = state
     local ok, err = pcall(function()
         mine.window = PrettyUI.Window.new(parent, {
-            title = "All heads (click one to use it)", x = x, y = y, width = width, height = height,
+            title = "All heads", x = x, y = y, width = width, height = height,
             minWidth = math.min(minWidth, width), minHeight = math.min(minHeight, height),
             resizable = true, scrollable = false, destroyOnClose = true,
             -- Closed with its X: the window destroys itself.
