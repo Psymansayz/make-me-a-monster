@@ -22,20 +22,9 @@ function Settings.load()
     Settings.npcID = saved("npcID")
     Settings.animID = saved("animID")
     Settings.animOverride = saved("animOverride")
-    local scale = saved("headScale")
-    Settings.headScale = scale and math.max(100, math.min(300, scale)) or 100
-    local width, height = saved("variantsWidth"), saved("variantsHeight")
-    if width and height and width > 0 and height > 0 then
-        Settings.variantsWidth, Settings.variantsHeight = width, height
-    else
-        Settings.variantsWidth, Settings.variantsHeight = nil, nil
-    end
-    local galleryWidth, galleryHeight = saved("galleryWidth"), saved("galleryHeight")
-    if galleryWidth and galleryHeight and galleryWidth > 0 and galleryHeight > 0 then
-        Settings.galleryWidth, Settings.galleryHeight = galleryWidth, galleryHeight
-    else
-        Settings.galleryWidth, Settings.galleryHeight = nil, nil
-    end
+    Settings.headScale = saved("headScale") or 100
+    Settings.variantsWidth, Settings.variantsHeight = saved("variantsWidth"), saved("variantsHeight")
+    Settings.galleryWidth, Settings.galleryHeight = saved("galleryWidth"), saved("galleryHeight")
 end
 
 local function save()
