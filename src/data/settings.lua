@@ -27,7 +27,8 @@ function Settings.load()
     Settings.galleryWidth, Settings.galleryHeight = saved("galleryWidth"), saved("galleryHeight")
 end
 
-local function save()
+-- Written when the plugin shuts down (the settings are only kept in memory until then).
+function Settings.save()
     PersistentDB:SetInt("npcID", Settings.npcID or -1)
     PersistentDB:SetInt("animID", Settings.animID or -1)
     PersistentDB:SetInt("animOverride", Settings.animOverride or -1)
@@ -38,43 +39,28 @@ local function save()
     PersistentDB:SetInt("galleryHeight", Settings.galleryHeight or -1)
 end
 
--- Written again as it stands (when the game screen is left and on shutdown), in case a write was lost.
-function Settings.save()
-    save()
-end
-
 function Settings.setAnim(animID)
-    if animID == Settings.animID then return end
     Settings.animID = animID
-    save()
 end
 
 function Settings.setAnimOverride(animID)
     Settings.animOverride = animID
-    save()
 end
 
 function Settings.setHeadScale(percent)
-    if percent == Settings.headScale then return end
     Settings.headScale = percent
-    save()
 end
 
 function Settings.setGallerySize(width, height)
-    if width == Settings.galleryWidth and height == Settings.galleryHeight then return end
     Settings.galleryWidth, Settings.galleryHeight = width, height
-    save()
 end
 
 function Settings.setVariantsSize(width, height)
-    if width == Settings.variantsWidth and height == Settings.variantsHeight then return end
     Settings.variantsWidth, Settings.variantsHeight = width, height
-    save()
 end
 
 function Settings.setNpc(npcID)
     Settings.npcID = npcID
-    save()
 end
 
 return Settings
