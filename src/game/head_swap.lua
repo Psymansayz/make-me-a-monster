@@ -83,6 +83,12 @@ function HeadSwap.npcHeadAnimation()
     return HeadSwap.npcVersionOfGameAnimation or Settings.lastSeenNpcAnimationID
 end
 
+-- What the NPC heads in the windows play: the animation an NPC's head plays, and where that is nothing (the default
+-- animation, with no line or NPC animation known), the NPC evil laugh.
+function HeadSwap.npcHeadAnimationForWindows()
+    return HeadSwap.npcHeadAnimation() or AnimationList.npcFallback
+end
+
 -- The animation the player's own head plays for the animation chosen (which may be one for an NPC's head): its
 -- HUMAN_ACTOR twin from src/data/animation_list.lua, else evil laugh. With none chosen:
 -- the neutral one if asked for (withNeutral, for a head shown outside dialogue), else nil.
