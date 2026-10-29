@@ -222,21 +222,21 @@ end
 local handledBoxes = {} -- interface -> true while it is open and has been handled
 
 -- A box that stays open can be filled again by the game with the next line (two lines in a row from the same side), and
--- is not seen to close in between. The server transmits the variable CHAT_V3_UPDATE_INTERFACE (id 8180) whenever a dialogue
--- box is updated (in the logs, a frame before the game filled it), so after it the open boxes are looked at again for a
--- few frames: heads the game has set again are swapped again, and heads that are already ours are left alone.
-local DIALOGUE_UPDATE_VARIABLE_ID = 8180
+-- is not seen to close in between. The server transmits variables whenever a dialogue box is updated (in the logs, a frame
+-- before the game filled it): the single boxes get CHAT_V3_UPDATE_INTERFACE (8180) and PAGEPOS (101), the pair box only
+-- PAGEPOS. After either, the open boxes are looked at again for a few frames: heads the game has set again are swapped
+-- again, and heads that are already ours are left alone.
+local DIALOGUE_UPDATE_VARIABLE_IDS = { [8180] = true, [101] = true }
 local FRAMES_TO_RECHECK = 5
 local framesToRecheck = 0
 
 Event.VarTransmit.Subscribe("make_me_a_monster_dialogue_update", function(event)
-    if event.var.id == DIALOGUE_UPDATE_VARIABLE_ID then framesToRecheck = FRAMES_TO_RECHECK end
+    if DIALOGUE_UPDATE_VARIABLE_IDS[event.var.id] then framesToRecheck = FRAMES_TO_RECHECK end
 end)
 
 -- For the plugin shutting down.
 function HeadSwap.stop()
     Event.VarTransmit.Unsubscribe("make_me_a_monster_dialogue_update")
-    Event.VarTransmit.Unsubscribe("make_me_a_monster_variable_log")
 end
 
 -- The head components of a box that has opened, swapped once.
@@ -283,56 +283,10 @@ local function watchBox(interface)
     end
 end
 
--- TEMPORARY LOG (dev only): every variable the server transmits while a dialogue box is open (the last 40 before are kept
--- and printed with the next change), and every change of the heads in the dialogue boxes, to find what announces an update
--- of the pair box.
-local logFrame, anyBoxOpen, lastVariables = 0, false, {}
-local lastHeadState = {} -- componentKey -> text
-local function flushVariables()
-    for _, line in ipairs(lastVariables) do print(line) end
-    lastVariables = {}
-end
-Event.VarTransmit.Subscribe("make_me_a_monster_variable_log", function(event)
-    local fetched, name, variableID = pcall(function() return event.var.configName, event.var.id end)
-    local line = ("[make_me_a_monster] VARS frame %d %s (%s) %s -> %s"):format(logFrame, tostring(name), tostring(variableID),
-        tostring(event.oldValue), tostring(event.newValue))
-    if anyBoxOpen then
-        print(line)
-    else
-        lastVariables[#lastVariables + 1] = line
-        if #lastVariables > 40 then table.remove(lastVariables, 1) end
-    end
-end)
-local function logHead(interface, staticID, componentKey)
-    local fetched, component = pcall(ui.Interfaces.GetComponent, ui.Interfaces, interface, staticID)
-    if not fetched or component == nil then return end
-    local state = component.visibleGlobal == true
-        and ("modelType %s modelID1 %s anim %s view %s"):format(tostring(component.modelType), tostring(component.modelID1),
-            tostring(component.animID), tostring(component.viewDistance))
-        or "hidden"
-    if state ~= lastHeadState[componentKey] then
-        flushVariables()
-        print(("[make_me_a_monster] CHANGE frame %d %s %s"):format(logFrame, componentKey, state))
-        lastHeadState[componentKey] = state
-    end
-end
-local function logChanges()
-    logFrame = logFrame + 1
-    anyBoxOpen = false
-    if isInterfaceOpen(PLAYER_LINE_INTERFACE) then anyBoxOpen = true logHead(PLAYER_LINE_INTERFACE, HEAD_STATIC_ID, "1191:8") end
-    if isInterfaceOpen(PAIR_INTERFACE) then
-        anyBoxOpen = true
-        logHead(PAIR_INTERFACE, HEAD_STATIC_ID, "1187:8")
-        logHead(PAIR_INTERFACE, PAIR_SECOND_HEAD_STATIC_ID, "1187:13")
-    end
-    if isInterfaceOpen(NPC_SPEECH_INTERFACE) then anyBoxOpen = true logHead(NPC_SPEECH_INTERFACE, HEAD_STATIC_ID, "1184:8") end
-end
-
 -- Every frame (a Draw event): looks for a box that has just opened or closed (three lookups), and for a few frames after
 -- a dialogue box was updated, at the heads in the open boxes. (The NPC's own animation is only used with an NPC head,
 -- so that box is watched only then.)
 function HeadSwap.tick()
-    logChanges()
     watchBox(PLAYER_LINE_INTERFACE)
     watchBox(PAIR_INTERFACE)
     if Settings.chosenNpcID ~= nil then watchBox(NPC_SPEECH_INTERFACE) end
