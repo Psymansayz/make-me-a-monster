@@ -221,25 +221,27 @@ local function refreshNpcDropdown()
         end
         if not alreadyListed then table.insert(matchingGroups, 1, activeGroup) end
     end
+    local chosenGroup = Settings.chosenNpcID and NpcDirectory.groupOfNpc(Settings.chosenNpcID) or nil
+    local chosenMember = Settings.chosenNpcID and NpcDirectory.memberOfNpc(Settings.chosenNpcID) or nil
     local entries = {}
     groupsByEntryID, matchedMembersByEntryID = {}, {}
     for entryID, npcGroup in ipairs(matchingGroups) do
-        -- While searching, an entry shows the name that matched, if it was one name of the group.
+        -- While searching, an entry shows the name that matched, if it was one name of the group. The entry of the group
+        -- the NPC chosen is in shows that NPC's name instead (it can be another name of the group, picked as a variant):
+        -- it stays when the dropdown is opened and closed without picking, and goes when another entry is picked.
         local matchedMember = NpcDirectory.memberMatching(npcGroup, query)
-        local label = matchedMember and NpcDirectory.labelOfMember(matchedMember)
-            or NpcDirectory.labelOfGroup(npcGroup, #visibleIds(npcGroup))
+        if npcGroup == chosenGroup and chosenMember ~= nil then matchedMember = chosenMember end
+        local label = matchedMember and NpcDirectory.labelOfMember(matchedMember) or NpcDirectory.labelOfGroup(npcGroup, #visibleIds(npcGroup))
         entries[#entries + 1] = { label = label, id = entryID }
         groupsByEntryID[entryID] = npcGroup
         matchedMembersByEntryID[entryID] = matchedMember
     end
-    local chosenGroup = Settings.chosenNpcID and NpcDirectory.groupOfNpc(Settings.chosenNpcID) or nil
     local selected = findSelectedEntryID(groupsByEntryID, function(npcGroup) return npcGroup == chosenGroup end)
     isRefreshingNpcDropdown = true
     pcall(function() pluginPage.npcDropdown:SetEntries(entries, selected) end)
     isRefreshingNpcDropdown = false
-    -- The closed box shows the name of the NPC chosen (it can be another name of the group, picked as a variant) until
-    -- the dropdown is opened, and nothing if the NPC isn't in the list.
-    local chosenMember = Settings.chosenNpcID and NpcDirectory.memberOfNpc(Settings.chosenNpcID) or nil
+    -- The closed box shows that name at once (the dropdown's own text doesn't follow a selection made by the plugin until it is
+    -- opened), and nothing if the NPC isn't in the list.
     if selected ~= nil and chosenMember ~= nil then
         coverDropdownText(pluginPage.npcDropdown, true, NpcDirectory.labelOfMember(chosenMember))
     else
