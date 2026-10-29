@@ -572,6 +572,7 @@ Event.GameStateChanged.Subscribe("make_me_a_monster_state", function(event)
 end)
 
 function PluginShutdown()
+    HeadSwap.unsubscribeLogging()
     Event.ContentLayerReady.Unsubscribe("make_me_a_monster_content")
     Event.Draw.Unsubscribe("make_me_a_monster_draw")
     Event.GameStateChanged.Unsubscribe("make_me_a_monster_state")

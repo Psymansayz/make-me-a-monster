@@ -142,14 +142,41 @@ local frameNumber = 0
 local lastSeenViewDistance = {}
 local function logLine(text) print("[make_me_a_monster] VIEWDIST frame " .. frameNumber .. " " .. text) end
 
+-- Every variable the server transmits: logged live while a dialogue box is open, otherwise kept (the last 40) and
+-- printed with the next head event, so the variables just before it show too.
+local recentVariables, dialogueIsOpen, VARIABLE_HISTORY = {}, false, 40
+local function flushRecentVariables()
+    for _, line in ipairs(recentVariables) do print(line) end
+    recentVariables = {}
+end
+local function onVariableTransmitted(event)
+    local succeeded, name, variableID = pcall(function() return event.var.configName, event.var.id end)
+    local line = ("[make_me_a_monster] VARS frame %d %s (%s) %s -> %s"):format(frameNumber, tostring(name), tostring(variableID),
+        tostring(event.oldValue), tostring(event.newValue))
+    if dialogueIsOpen then
+        print(line)
+    else
+        recentVariables[#recentVariables + 1] = line
+        if #recentVariables > VARIABLE_HISTORY then table.remove(recentVariables, 1) end
+    end
+end
+if Event ~= nil and Event.VarTransmit ~= nil then Event.VarTransmit.Subscribe("make_me_a_monster_variable_log", onVariableTransmitted) end
+function HeadSwap.unsubscribeLogging()
+    if Event ~= nil and Event.VarTransmit ~= nil then Event.VarTransmit.Unsubscribe("make_me_a_monster_variable_log") end
+end
+
 -- EXPERIMENT (dev only): the head size is written once, when an NPC's head is put in a box, from the view distance the
 -- game uses for the player's line (2150 in every log seen), instead of being checked every frame.
 local GAME_VIEW_DISTANCE = 2150
+
+local writtenDistance = {}
 
 local function setHeadScaleOnce(componentKey, component)
     if Settings.headScale <= 1 then return end
     local scaled = math.max(1, math.floor(GAME_VIEW_DISTANCE / Settings.headScale + 0.5))
     component.viewDistance = scaled
+    writtenDistance[componentKey] = scaled
+    flushRecentVariables()
     logLine(componentKey .. " view distance set once to " .. scaled)
 end
 
@@ -242,6 +269,14 @@ local function swapComponentHead(component, npcID, componentKey)
     end
     if modelType == NPC_HEAD_MODEL_TYPE and component.modelID1 == npcID then
         HeadSwap.applyNpcHeadAnimation(component) -- (already ours: the animation kept up)
+        -- (diagnostic only: the game changing the distance we wrote is logged, and left as it is)
+        local currentDistance = component.viewDistance
+        if writtenDistance[componentKey] ~= nil and currentDistance ~= writtenDistance[componentKey] then
+            flushRecentVariables()
+            logLine(componentKey .. " GAME CHANGED the view distance we wrote (" .. tostring(writtenDistance[componentKey])
+                .. ") to " .. tostring(currentDistance))
+            writtenDistance[componentKey] = currentDistance
+        end
         return
     end
     if modelType ~= PLAYER_HEAD_MODEL_TYPE then return end -- an NPC's own head stays
@@ -262,14 +297,17 @@ end
 function HeadSwap.tick()
     frameNumber = frameNumber + 1
     local npcID = Settings.chosenNpcID
-    if npcID ~= nil and isInterfaceOpen(NPC_SPEECH_INTERFACE) then pcall(learnNpcSpeechAnimation) end
+    local npcSpeechOpen = npcID ~= nil and isInterfaceOpen(NPC_SPEECH_INTERFACE)
+    if npcSpeechOpen then pcall(learnNpcSpeechAnimation) end
     -- (nothing to do with no NPC, no animation chosen, normal size and nothing left to put back)
     if npcID == nil and Settings.chosenAnimationID == nil and Settings.headScale <= 1 and next(scaledViewDistance) == nil
         and next(writtenAnimation) == nil and next(swappedHeads) == nil then
         return
     end
+    dialogueIsOpen = npcSpeechOpen
     for _, interface in ipairs(PLAYER_HEAD_INTERFACES) do
         if isInterfaceOpen(interface) then
+            dialogueIsOpen = true
             local components = modelComponents(interface)
             if components ~= nil then
                 for position, staticID in ipairs(components.ids) do
