@@ -296,6 +296,7 @@ local function buildPage(pluginLayer)
         onChange = function(_, sliderValue)
             local percent = math.max(100, math.min(300, math.floor(sliderValue / 5 + 0.5) * 5))
             Settings.setHeadScale(percent / 100)
+            HeadSwap.refreshHeadScale() -- (the heads shown now follow)
             pcall(function() pageControls.headSizeText.content = "Head size: " .. percent .. "%" end)
         end,
     })
