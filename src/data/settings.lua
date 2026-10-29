@@ -5,9 +5,9 @@ local Animations = require("src/data/animations")
 
 local Settings = {}
 
-Settings.npcID = nil -- the NPC whose head replaces the player's, or nil for none
-Settings.animID = nil     -- the chat animation last seen on a real NPC's head (learned), or nil
-Settings.animOverride = nil -- the animation picked from the animation dropdown, or nil
+Settings.chosenNpcID = nil -- the NPC whose head replaces the player's, or nil for none
+Settings.lastSeenNpcAnimationID = nil     -- the chat animation last seen on a real NPC's head (learned), or nil
+Settings.chosenAnimationID = nil -- the animation picked from the animation dropdown, or nil
 Settings.headScale = 1  -- how many times larger than the game draws it the head is drawn (1 to 3; saved as a percentage)
 Settings.variantsWidth = nil  -- the size the variants window was left at, or nil
 Settings.variantsHeight = nil
@@ -15,34 +15,34 @@ Settings.galleryWidth = nil   -- the size the all-heads window was left at, or n
 Settings.galleryHeight = nil
 
 -- A saved integer that isn't negative, or nil.
-local function saved(key)
-    local value = PersistentDB:GetInt(key)
-    return value ~= nil and value >= 0 and value or nil
+local function savedInteger(settingKey)
+    local savedValue = PersistentDB:GetInt(settingKey)
+    return savedValue ~= nil and savedValue >= 0 and savedValue or nil
 end
 
 function Settings.load()
-    Settings.npcID = saved("npcID")
-    Settings.animID = saved("animID")
+    Settings.chosenNpcID = savedInteger("npcID")
+    Settings.lastSeenNpcAnimationID = savedInteger("animID")
     -- Nothing saved at all: evil laugh, the player's or the NPC's kind by the head in use. (Saved as -1: the player
     -- chose the default animation.)
-    local anim = PersistentDB:GetInt("animOverride")
-    if anim == nil then
-        anim = Settings.npcID and Animations.npcFallback or Animations.fallback
-    elseif anim < 0 then
-        anim = nil
+    local animationID = PersistentDB:GetInt("animOverride")
+    if animationID == nil then
+        animationID = Settings.chosenNpcID and Animations.npcFallback or Animations.fallback
+    elseif animationID < 0 then
+        animationID = nil
     end
-    Settings.animOverride = anim
-    local percent = saved("headScale")
+    Settings.chosenAnimationID = animationID
+    local percent = savedInteger("headScale")
     Settings.headScale = percent and percent / 100 or 1
-    Settings.variantsWidth, Settings.variantsHeight = saved("variantsWidth"), saved("variantsHeight")
-    Settings.galleryWidth, Settings.galleryHeight = saved("galleryWidth"), saved("galleryHeight")
+    Settings.variantsWidth, Settings.variantsHeight = savedInteger("variantsWidth"), savedInteger("variantsHeight")
+    Settings.galleryWidth, Settings.galleryHeight = savedInteger("galleryWidth"), savedInteger("galleryHeight")
 end
 
 -- Written when the plugin shuts down (the settings are only kept in memory until then).
 function Settings.save()
-    PersistentDB:SetInt("npcID", Settings.npcID or -1)
-    PersistentDB:SetInt("animID", Settings.animID or -1)
-    PersistentDB:SetInt("animOverride", Settings.animOverride or -1)
+    PersistentDB:SetInt("npcID", Settings.chosenNpcID or -1)
+    PersistentDB:SetInt("animID", Settings.lastSeenNpcAnimationID or -1)
+    PersistentDB:SetInt("animOverride", Settings.chosenAnimationID or -1)
     PersistentDB:SetInt("headScale", math.floor(Settings.headScale * 100 + 0.5))
     PersistentDB:SetInt("variantsWidth", Settings.variantsWidth or -1)
     PersistentDB:SetInt("variantsHeight", Settings.variantsHeight or -1)
@@ -50,12 +50,12 @@ function Settings.save()
     PersistentDB:SetInt("galleryHeight", Settings.galleryHeight or -1)
 end
 
-function Settings.setAnim(animID)
-    Settings.animID = animID
+function Settings.setLastSeenNpcAnimation(animID)
+    Settings.lastSeenNpcAnimationID = animID
 end
 
-function Settings.setAnimOverride(animID)
-    Settings.animOverride = animID
+function Settings.setChosenAnimation(animID)
+    Settings.chosenAnimationID = animID
 end
 
 function Settings.setHeadScale(scale)
@@ -70,8 +70,8 @@ function Settings.setVariantsSize(width, height)
     Settings.variantsWidth, Settings.variantsHeight = width, height
 end
 
-function Settings.setNpc(npcID)
-    Settings.npcID = npcID
+function Settings.setChosenNpc(npcID)
+    Settings.chosenNpcID = npcID
 end
 
 return Settings
