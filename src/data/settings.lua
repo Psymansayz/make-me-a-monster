@@ -1,7 +1,7 @@
 -- The settings, saved in PersistentDB (shared by every character on this PC), each as an integer entry under its
 -- own key. An entry that isn't there reads as nil, which is the default; a setting with nothing chosen is saved as -1.
 
-local PlayerAnims = require("src/data/player_head_animations")
+local Animations = require("src/data/animations")
 
 local Settings = {}
 
@@ -27,7 +27,7 @@ function Settings.load()
     -- chose the default animation.)
     local anim = PersistentDB:GetInt("animOverride")
     if anim == nil then
-        anim = Settings.npcID and PlayerAnims.npcFallback or PlayerAnims.fallback
+        anim = Settings.npcID and Animations.npcFallback or Animations.fallback
     elseif anim < 0 then
         anim = nil
     end

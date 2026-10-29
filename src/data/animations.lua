@@ -1,6 +1,6 @@
 -- The animations the plugin lists, in the order of the dropdown: { id, label } for the NPC heads' animations (npc)
 -- and the player's own head's (own). Read by src/game/anims.lua. A new animation is added here, in its place in
--- the order, once it has been checked to work.
+-- the order, once it has been checked to work. After the lists: how the two kinds of animation go with each other.
 return {
     npc = {
         { id = 9789, label = "ANGRY EXTREME" },
@@ -83,4 +83,56 @@ return {
         { id = 37936, label = "SLEEP" },
         { id = 37938, label = "SWOLLEN JAW" },
     },
+    -- The player's own head plays the HUMAN_ACTOR_CHATHEAD_... animations, not the NPC heads' HUMAN_UPDATE_CHATHEAD_...
+    -- ones listed in npc. A listed animation's id = the id of its player twin (the same emotion and strength). One
+    -- with no twin (a non-human animation) is played as it is.
+    twin = {
+        [9742] = 37920,
+        [9746] = 37921,
+        [9750] = 37922,
+        [9757] = 37910,
+        [9761] = 37911,
+        [9765] = 37912,
+        [9769] = 37926,
+        [9773] = 37927,
+        [9777] = 37928,
+        [9781] = 37907,
+        [9785] = 37908,
+        [9789] = 37909,
+        [9793] = 37932,
+        [9802] = 37936,
+        [9803] = 37902,
+        [9804] = 37903,
+        [9807] = 37902,
+        [9811] = 37933,
+        [9827] = 37930,
+        [9831] = 37929,
+        [9835] = 37916,
+        [9836] = 37931,
+        [9840] = 37915,
+        [9841] = 37914,
+        [9842] = 37913,
+        [9843] = 37904,
+        [9847] = 37905,
+        [9851] = 37906,
+        [11009] = 37935,
+        [12648] = 37917,
+        [12649] = 37918,
+        [12650] = 37919,
+        [29828] = 37923,
+        [29832] = 37924,
+        [29836] = 37925,
+    },
+    -- Player animations that also stand for a listed animation (when switching back to an NPC's head), though
+    -- another player animation is its twin: { [player animation] = listed animation }. MIND_READ for the eyeglo mind
+    -- meld, whose twin is GNOME_MIND_MELD.
+    alsoFor = { [37934] = 11009 },
+    -- Played on the player's own head when none is chosen, where a head is shown outside dialogue (the variants
+    -- window): HUMAN_ACTOR_CHATHEAD_NEUTRAL_STANDARD.
+    neutral = 37902,
+    -- Where an NPC animation has no player twin, the one used when switching to the player's own head:
+    -- HUMAN_ACTOR_CHATHEAD_EVIL_LAUGH_STANDARD.
+    fallback = 37913,
+    -- The same for an NPC head: HUMAN_UPDATE_CHATHEAD_EVIL_LAUGH_LEN_ALL.
+    npcFallback = 9842,
 }
