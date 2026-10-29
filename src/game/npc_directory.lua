@@ -201,18 +201,19 @@ local function containsEveryWord(text, queryWords)
 end
 
 -- The name of the group (a member) that matched the query, for the dropdown to show: of the names whose own text and ids hold
--- every word of the query, the shortest (the most general: "Goblin" before "Goblin guard"), the first if equal. Nil if the
--- query is blank or its words are spread over different names.
+-- every word of the query, the shortest (the most general: "Goblin" before "Goblin guard"), the first if equal. Also how
+-- many NPCs the matching names have in all. Nil if the query is blank or its words are spread over different names.
 function NpcDirectory.memberMatching(npcGroup, query)
     local queryWords = wordsOfQuery(query)
     if #queryWords == 0 then return nil end
-    local best = nil
+    local best, matchingNpcCount = nil, 0
     for _, member in ipairs(npcGroup.members) do
-        if containsEveryWord(searchOfMember(member), queryWords) and (best == nil or #member.name < #best.name) then
-            best = member
+        if containsEveryWord(searchOfMember(member), queryWords) then
+            matchingNpcCount = matchingNpcCount + #member.ids
+            if best == nil or #member.name < #best.name then best = member end
         end
     end
-    return best
+    return best, matchingNpcCount
 end
 
 -- Development: the lines to log once a scan has been merged into entries (visibleIds(group) = the ids worth showing),
@@ -288,9 +289,11 @@ function NpcDirectory.labelOfGroup(npcGroup, variantCount)
     return variantCount > 1 and (npcGroup.name .. " (" .. variantCount .. " variants)") or npcGroup.name
 end
 
--- The same for one name of a group (a member): its name, and how many NPCs have it if more than one.
-function NpcDirectory.labelOfMember(member)
-    return #member.ids > 1 and (member.name .. " (" .. #member.ids .. " variants)") or member.name
+-- The same for one name of a group (a member): its name, and how many NPCs there are if more than one (`variantCount`: the
+-- NPCs that matched a search; all the NPCs with this name if not given).
+function NpcDirectory.labelOfMember(member, variantCount)
+    variantCount = variantCount or #member.ids
+    return variantCount > 1 and (member.name .. " (" .. variantCount .. " variants)") or member.name
 end
 
 -- Merging names into entries -------------------------------------------------------------------------------
