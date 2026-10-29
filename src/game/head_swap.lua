@@ -5,7 +5,7 @@
 -- fills or lays out a box, so it would otherwise flash up or come back.
 
 local Anims = require("src/game/anims")
-local PlayerAnims = require("src/data/player_head_animations")
+local Animations = require("src/data/animations")
 
 local HeadSwap = {}
 
@@ -63,20 +63,20 @@ local function wantedAnim()
 end
 
 -- The animation the player's own head plays for the animation chosen (which is one for an NPC's head): its
--- HUMAN_ACTOR twin from src/data/player_head_animations.lua, else the one chosen as it is. With none chosen:
+-- HUMAN_ACTOR twin from src/data/animations.lua, else the one chosen as it is. With none chosen:
 -- the neutral one if asked for (withNeutral, for a head shown outside dialogue), else nil.
 function HeadSwap.ownHeadAnim(withNeutral)
     local chosen = HeadSwap.animOverride
-    if chosen == nil then return withNeutral and PlayerAnims.neutral or nil end
-    return PlayerAnims.twin[chosen] or chosen
+    if chosen == nil then return withNeutral and Animations.neutral or nil end
+    return Animations.twin[chosen] or chosen
 end
 
 -- The listed animation that has this player animation as its twin (the lowest id if several), or nil. (The player's
 -- head animations don't play on an NPC's head, their NPC twins do.)
 local function npcTwinOf(actorID)
-    if PlayerAnims.alsoFor[actorID] ~= nil then return PlayerAnims.alsoFor[actorID] end
+    if Animations.alsoFor[actorID] ~= nil then return Animations.alsoFor[actorID] end
     local best = nil
-    for npcAnim, twinID in pairs(PlayerAnims.twin) do
+    for npcAnim, twinID in pairs(Animations.twin) do
         if twinID == actorID and (best == nil or npcAnim < best) then best = npcAnim end
     end
     return best
@@ -90,10 +90,10 @@ function HeadSwap.animForHead(animID, ownHead)
     local isPlayers = Anims.isOwn(animID)
     if ownHead then
         if isPlayers then return animID end
-        return PlayerAnims.twin[animID] or PlayerAnims.fallback
+        return Animations.twin[animID] or Animations.fallback
     end
     if not isPlayers then return animID end
-    return npcTwinOf(animID) or npcTwinOf(PlayerAnims.fallback)
+    return npcTwinOf(animID) or npcTwinOf(Animations.fallback)
 end
 
 function HeadSwap.animate(component)
