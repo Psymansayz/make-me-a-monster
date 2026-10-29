@@ -8,7 +8,7 @@ local Settings = {}
 Settings.npcID = nil -- the NPC whose head replaces the player's, or nil for none
 Settings.animID = nil     -- the chat animation last seen on a real NPC's head (learned), or nil
 Settings.animOverride = nil -- the animation picked from the animation dropdown, or nil
-Settings.headScale = 100      -- how large the head is drawn in dialogue, as a percentage of normal (100 to 300)
+Settings.headScale = 1  -- how many times larger than the game draws it the head is drawn (1 to 3; saved as a percentage)
 Settings.variantsWidth = nil  -- the size the variants window was left at, or nil
 Settings.variantsHeight = nil
 Settings.galleryWidth = nil   -- the size the all-heads window was left at, or nil
@@ -32,7 +32,8 @@ function Settings.load()
         anim = nil
     end
     Settings.animOverride = anim
-    Settings.headScale = saved("headScale") or 100
+    local percent = saved("headScale")
+    Settings.headScale = percent and percent / 100 or 1
     Settings.variantsWidth, Settings.variantsHeight = saved("variantsWidth"), saved("variantsHeight")
     Settings.galleryWidth, Settings.galleryHeight = saved("galleryWidth"), saved("galleryHeight")
 end
@@ -42,7 +43,7 @@ function Settings.save()
     PersistentDB:SetInt("npcID", Settings.npcID or -1)
     PersistentDB:SetInt("animID", Settings.animID or -1)
     PersistentDB:SetInt("animOverride", Settings.animOverride or -1)
-    PersistentDB:SetInt("headScale", Settings.headScale)
+    PersistentDB:SetInt("headScale", math.floor(Settings.headScale * 100 + 0.5))
     PersistentDB:SetInt("variantsWidth", Settings.variantsWidth or -1)
     PersistentDB:SetInt("variantsHeight", Settings.variantsHeight or -1)
     PersistentDB:SetInt("galleryWidth", Settings.galleryWidth or -1)
@@ -57,8 +58,8 @@ function Settings.setAnimOverride(animID)
     Settings.animOverride = animID
 end
 
-function Settings.setHeadScale(percent)
-    Settings.headScale = percent
+function Settings.setHeadScale(scale)
+    Settings.headScale = scale
 end
 
 function Settings.setGallerySize(width, height)

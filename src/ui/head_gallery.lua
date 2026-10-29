@@ -15,12 +15,11 @@
 -- (the highlight then moves to it);
 -- nameOf(id) is the name shown under each head. HeadGallery.tick(): every frame. HeadGallery.close().
 
+local Settings = require("src/data/settings")
+
 local HeadGallery = {}
 
 HeadGallery.animFor = nil -- function() -> the animation id the heads should play, or nil
-HeadGallery.scaleFor = nil -- function() -> how many times larger than normal the heads are drawn (the head size setting)
-HeadGallery.savedSize = nil -- { width, height } the window was last left at: it opens at that size
-HeadGallery.onResized = nil -- function(width, height): called when the window closes at a size
 HeadGallery.onClosed = nil -- function(): called when the window has closed, however it was closed
 
 local COLUMNS, ROWS = 5, 4
@@ -44,8 +43,7 @@ local function colour(c) return Vector4.new(c[1], c[2], c[3], c[4]) end
 
 -- The head size setting: how many times larger than normal the heads are drawn (1: normal).
 local function headScale()
-    local scale = HeadGallery.scaleFor and HeadGallery.scaleFor() or 1
-    return type(scale) == "number" and scale >= 1 and scale or 1
+    return Settings.headScale
 end
 
 local function destroyCells()
@@ -59,12 +57,12 @@ local function destroyCells()
     state.cells = {}
 end
 
--- The window's size, handed on to HeadGallery.onResized (to be remembered), if it can be read.
+-- The window's size, handed to the settings (to be remembered), if it can be read.
 local function reportSize(shown)
-    if HeadGallery.onResized == nil or shown == nil or shown.window == nil then return end
+    if shown == nil or shown.window == nil then return end
     local ok, width, height = pcall(function() return shown.window.root.width, shown.window.root.height end)
     if ok and type(width) == "number" and type(height) == "number" and width > 0 and height > 0 then
-        pcall(HeadGallery.onResized, math.floor(width), math.floor(height))
+        Settings.setGallerySize(math.floor(width), math.floor(height))
     end
 end
 
@@ -294,7 +292,7 @@ function HeadGallery.open(PrettyUI, parent, heads, current, onPick, nameOf)
     local minWidth = math.max(MIN_WIDTH, COLUMNS * MIN_CELL_W + (COLUMNS - 1) * GAP + PAD * 2 + BORDERS)
     local minHeight = ROWS * MIN_CELL_H + (ROWS - 1) * GAP + PAD * 2 + NAV_HEIGHT + 4 + TITLE_AND_BOTTOM
     -- As it was left, if it was.
-    if HeadGallery.savedSize ~= nil then width, height = HeadGallery.savedSize.width, HeadGallery.savedSize.height end
+    if Settings.galleryWidth ~= nil then width, height = Settings.galleryWidth, Settings.galleryHeight end
     -- (kept on the screen, and no smaller than it can be resized to)
     width = math.max(math.min(minWidth, parent.width), math.min(width, parent.width))
     height = math.max(math.min(minHeight, parent.height), math.min(height, parent.height))

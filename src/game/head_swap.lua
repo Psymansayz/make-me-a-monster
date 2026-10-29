@@ -5,17 +5,13 @@
 -- fills or lays out a box, so it would otherwise flash up or come back.
 
 local Anims = require("src/game/anims")
+local Settings = require("src/data/settings")
 local Animations = require("src/data/animations")
 
 local HeadSwap = {}
 
-HeadSwap.npcID = nil   -- the NPC whose head is shown, or nil to leave the boxes alone
-HeadSwap.scale = 1 -- how many times larger than the game draws it the player's head is drawn (1: as the game does)
-HeadSwap.animOverride = nil -- an animation id chosen by the player, used for the swapped head
 HeadSwap.rawPlayerAnim = nil -- the same, as the game set it
 HeadSwap.playerAnim = nil   -- the animation the game last set on the player's head, before it was swapped
-HeadSwap.learnedAnim = nil  -- the animation last seen on a real NPC's head in the NPC speech box
-HeadSwap.onLearned = nil    -- function(animID): called when a new one is seen
 
 -- Interfaces with a player head: the player's line (CHAT_V2_RIGHT) and two heads at once (CHAT_V2_PAIR).
 -- The ids are as seen in game; id.Interface is preferred when it has them.
@@ -59,14 +55,14 @@ end
 -- head for the line (HeadSwap.playerAnim, see npcTwinOf), else the one seen on a real NPC's head, else the
 -- game's own animation as it is (HeadSwap.rawPlayerAnim).
 local function wantedAnim()
-    return HeadSwap.animOverride or HeadSwap.playerAnim or HeadSwap.learnedAnim or HeadSwap.rawPlayerAnim
+    return Settings.animOverride or HeadSwap.playerAnim or Settings.animID or HeadSwap.rawPlayerAnim
 end
 
 -- The animation the player's own head plays for the animation chosen (which is one for an NPC's head): its
 -- HUMAN_ACTOR twin from src/data/animations.lua, else the one chosen as it is. With none chosen:
 -- the neutral one if asked for (withNeutral, for a head shown outside dialogue), else nil.
 function HeadSwap.playerHeadAnim(withNeutral)
-    local chosen = HeadSwap.animOverride
+    local chosen = Settings.animOverride
     if chosen == nil then return withNeutral and Animations.neutral or nil end
     return Animations.twin[chosen] or chosen
 end
@@ -116,9 +112,8 @@ local function learn()
         local component = ui.Interfaces:GetComponent(NPC_BOX, staticID)
         if component.visibleGlobal == true and tonumber(component.modelType) == NPC_HEAD then
             local anim = tonumber(component.animID)
-            if anim ~= nil and anim >= 0 and anim ~= HeadSwap.learnedAnim then
-                HeadSwap.learnedAnim = anim
-                if HeadSwap.onLearned then HeadSwap.onLearned(anim) end
+            if anim ~= nil and anim >= 0 and anim ~= Settings.animID then
+                Settings.setAnim(anim)
             end
         end
     end
@@ -131,7 +126,7 @@ end
 
 local scaled = {} -- component key -> { original, written }: the view distance the game set, and the one written
 
--- The head drawn HeadSwap.scale times larger by moving the camera closer: the view distance is the game's divided
+-- The head drawn Settings.headScale times larger by moving the camera closer: the view distance is the game's divided
 -- by the scale. The game sets the view distance itself when it fills a box, so a value other than the one written
 -- is the game's, and becomes the new original. (Only as large as the box's own space: more of the head than that
 -- is cut off at its edge.)
@@ -141,7 +136,7 @@ local function applyScale(key, component)
     local current = component.viewDistance
     if type(current) ~= "number" then return end
     local record = scaled[key]
-    if HeadSwap.scale <= 1 then
+    if Settings.headScale <= 1 then
         if record ~= nil and current == record.written then component.viewDistance = record.original end
         scaled[key] = nil
         return
@@ -150,7 +145,7 @@ local function applyScale(key, component)
         record = { original = current }
         scaled[key] = record
     end
-    local wanted = math.max(1, math.floor(record.original / HeadSwap.scale + 0.5))
+    local wanted = math.max(1, math.floor(record.original / Settings.headScale + 0.5))
     if current ~= wanted then component.viewDistance = wanted end
     record.written = wanted
 end
@@ -190,10 +185,10 @@ end
 
 -- Every frame.
 function HeadSwap.tick()
-    local npcID = HeadSwap.npcID
+    local npcID = Settings.npcID
     if npcID ~= nil then pcall(learn) end -- (the NPC's own animation is only used with an NPC's head)
     -- (nothing to do with no NPC, no animation chosen, normal size and no size left to put back)
-    if npcID == nil and HeadSwap.animOverride == nil and HeadSwap.scale <= 1 and next(scaled) == nil then return end
+    if npcID == nil and Settings.animOverride == nil and Settings.headScale <= 1 and next(scaled) == nil then return end
     for _, interface in ipairs(INTERFACES) do
         local ok, statics = false, nil
         if isOpen(interface) then ok, statics = pcall(modelStatics, interface) end

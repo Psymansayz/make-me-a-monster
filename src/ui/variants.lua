@@ -10,15 +10,13 @@
 -- cells are placed again when it differs.
 
 local HeadGallery = require("src/ui/head_gallery")
+local Settings = require("src/data/settings")
 
 local Variants = {}
 
 Variants.animFor = nil -- function() -> the animation id the NPC heads should play, or nil
 Variants.animForPlayer = nil -- function() -> the animation id the player's own head should play, or nil
-Variants.scaleFor = nil -- function() -> how many times larger than normal the heads are drawn (the head size setting)
 Variants.PLAYER = -1 -- the id standing for the player's own head (as the game's, for the local player)
-Variants.savedSize = nil -- { width, height } the window was last left at: it opens at that size
-Variants.onResized = nil -- function(width, height): called when the window closes at a size
 
 local COLUMNS, ROWS = 3, 3
 local PAGE_SIZE = COLUMNS * ROWS
@@ -69,12 +67,12 @@ local function pick(npcID)
     for _, cell in ipairs(state.cells) do paint(cell, cell.id == npcID) end
 end
 
--- The window's size, handed on to Variants.onResized (to be remembered), if it can be read.
+-- The window's size, handed to the settings (to be remembered), if it can be read.
 local function reportSize(shown)
-    if Variants.onResized == nil or shown == nil or shown.window == nil then return end
+    if shown == nil or shown.window == nil then return end
     local ok, width, height = pcall(function() return shown.window.root.width, shown.window.root.height end)
     if ok and type(width) == "number" and type(height) == "number" and width > 0 and height > 0 then
-        pcall(Variants.onResized, math.floor(width), math.floor(height))
+        Settings.setVariantsSize(math.floor(width), math.floor(height))
     end
 end
 
@@ -94,8 +92,7 @@ end
 
 -- The head size setting: how many times larger than normal the heads are drawn (1: normal).
 local function headScale()
-    local scale = Variants.scaleFor and Variants.scaleFor() or 1
-    return type(scale) == "number" and scale >= 1 and scale or 1
+    return Settings.headScale
 end
 
 -- A cell's parts put in their places (and sized) for the geometry g.
@@ -282,8 +279,8 @@ function Variants.open(PrettyUI, parent, title, ids, current, onPick, labelFor)
     local minWidth = COLUMNS * MIN_CELL_W + (COLUMNS - 1) * GAP + PAD * 2 + BORDERS
     local minHeight = ROWS * MIN_CELL_H + (ROWS - 1) * GAP + PAD * 2 + NAV_HEIGHT + 4 + TITLE_AND_BOTTOM
     -- As it was left, else the size the all-heads window opens at.
-    if Variants.savedSize ~= nil then
-        width, height = Variants.savedSize.width, Variants.savedSize.height
+    if Settings.variantsWidth ~= nil then
+        width, height = Settings.variantsWidth, Settings.variantsHeight
     else
         width, height = HeadGallery.defaultSize(parent)
     end
