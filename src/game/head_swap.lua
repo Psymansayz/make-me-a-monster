@@ -13,19 +13,16 @@ local HeadSwap = {}
 -- The NPC version of the animation the game last set on the player's head, before it was swapped (nil if it has none).
 HeadSwap.npcVersionOfGameAnimation = nil
 
--- Interfaces with a player head: the player's line (CHAT_V2_RIGHT) and two heads at once (CHAT_V2_PAIR).
--- The ids are as seen in game; id.Interface is preferred when it has them.
-local function interfaceID(interfaceName, defaultID)
-    local succeeded, detectedID = pcall(function() return id.Interface[interfaceName] end)
-    return succeeded and type(detectedID) == "number" and detectedID or defaultID
-end
-local PLAYER_HEAD_INTERFACES = {
-    interfaceID("CHAT_V2_RIGHT", 1191),
-    interfaceID("CHAT_V2_PAIR", 1187),
-}
-local MAX_COMPONENT_SCAN_ID = 40 -- the boxes' head components are among their first statics
-
-local NPC_SPEECH_INTERFACE = interfaceID("CHAT_V2_LEFT", 1184) -- the NPC's line: its head is always the NPC's own
+-- The dialogue boxes and the model components in them that hold a head. These are fixed in the game (seen in its logs):
+--   1184 (CHAT_V2_LEFT): the NPC's line, one head, component 8, always the NPC's own.
+--   1191 (CHAT_V2_RIGHT): the player's line, one head, component 8.
+--   1187 (CHAT_V2_PAIR): two heads, components 8 and 13; each can hold the player, an NPC, or in a dialogue without the
+--   player, two NPCs. Only a component holding the player's head is changed.
+local NPC_SPEECH_INTERFACE = 1184
+local PLAYER_LINE_INTERFACE = 1191
+local PAIR_INTERFACE = 1187
+local HEAD_STATIC_ID = 8
+local PAIR_SECOND_HEAD_STATIC_ID = 13
 
 local PLAYER_HEAD_MODEL_TYPE = 3 -- ui.ModelType values
 local NPC_HEAD_MODEL_TYPE = 2
@@ -40,57 +37,6 @@ for npcAnimation, playerAnimation in pairs(AnimationList.twin) do
 end
 for playerAnimation, npcAnimation in pairs(AnimationList.alsoFor) do
     npcVersionOfPlayerAnimation[playerAnimation] = npcAnimation
-end
-
--- interface id -> { ids = static ids of its model components (their type doesn't change), keys = their keys }
-local modelComponentsOfInterface = {}
-
--- The model components of an interface, found once it is loaded; nil while it isn't.
-local function modelComponents(interface)
-    local components = modelComponentsOfInterface[interface]
-    if components ~= nil then return components end
-    local fetched, interfaceObject = pcall(ui.Interfaces.GetInterface, ui.Interfaces, interface)
-    if not fetched or interfaceObject == nil then return nil end
-    components = { ids = {}, keys = {} }
-    local MODEL = ui.ComponentType.MODEL
-    for staticID = 0, MAX_COMPONENT_SCAN_ID do
-        local succeeded, isModel = pcall(function()
-            local component = ui.Interfaces:GetComponent(interface, staticID)
-            return component ~= nil and component.type == MODEL
-        end)
-        if succeeded and isModel then
-            components.ids[#components.ids + 1] = staticID
-            components.keys[#components.keys + 1] = interface .. ":" .. staticID
-        end
-    end
-    modelComponentsOfInterface[interface] = components
-    print(("[make_me_a_monster] COMPONENTS interface %d model component static ids: %s"):format(interface,
-        table.concat(components.ids, ",")))
-    return components
-end
-
--- TEMPORARY LOG (dev only): what each head component holds the first time it is visible in a dialogue.
-local loggedVisible = {}
-local function logComponentOnce(componentKey, component)
-    if loggedVisible[componentKey] then return end
-    loggedVisible[componentKey] = true
-    print(("[make_me_a_monster] COMPONENTS %s visible: modelType %s modelID1 %s viewDistance %s animID %s at x %s y %s size %sx%s"):format(
-        componentKey, tostring(component.modelType), tostring(component.modelID1), tostring(component.viewDistance),
-        tostring(component.animID), tostring(component.x), tostring(component.y), tostring(component.width), tostring(component.height)))
-end
-
--- Three frames after a head is swapped, where every component of that interface is.
-local tickCount = 0
-local positionsDue = {} -- interface -> the tick to log them at
-local function logPositions(interface, components)
-    for position, staticID in ipairs(components.ids) do
-        local fetched, component = pcall(ui.Interfaces.GetComponent, ui.Interfaces, interface, staticID)
-        if fetched and component ~= nil and component.visibleGlobal == true then
-            print(("[make_me_a_monster] COMPONENTS %s AFTER SWAP: modelType %s modelID1 %s at x %s y %s size %sx%s"):format(
-                components.keys[position], tostring(component.modelType), tostring(component.modelID1), tostring(component.x),
-                tostring(component.y), tostring(component.width), tostring(component.height)))
-        end
-    end
 end
 
 -- Whether an interface is open now. (Checked first each frame, so a closed box costs nothing more.)
@@ -141,17 +87,11 @@ end
 
 -- Notes the animation of the NPC speech box's head, for the swapped head to use. (Called while that box is open.)
 local function learnNpcSpeechAnimation()
-    local components = modelComponents(NPC_SPEECH_INTERFACE)
-    if components == nil then return end
-    for position, staticID in ipairs(components.ids) do
-        local component = ui.Interfaces:GetComponent(NPC_SPEECH_INTERFACE, staticID)
-        if component.visibleGlobal == true then logComponentOnce(components.keys[position], component)
-        else loggedVisible[components.keys[position]] = nil end
-        if component.visibleGlobal == true and tonumber(component.modelType) == NPC_HEAD_MODEL_TYPE then
-            local animationID = tonumber(component.animID)
-            if animationID ~= nil and animationID >= 0 and animationID ~= Settings.lastSeenNpcAnimationID then
-                Settings.setLastSeenNpcAnimation(animationID)
-            end
+    local component = ui.Interfaces:GetComponent(NPC_SPEECH_INTERFACE, HEAD_STATIC_ID)
+    if component.visibleGlobal == true and tonumber(component.modelType) == NPC_HEAD_MODEL_TYPE then
+        local animationID = tonumber(component.animID)
+        if animationID ~= nil and animationID >= 0 and animationID ~= Settings.lastSeenNpcAnimationID then
+            Settings.setLastSeenNpcAnimation(animationID)
         end
     end
 end
@@ -179,19 +119,18 @@ end
 -- player's own head stays, playing the animation the player picked. Either way it is drawn at the size set.
 local function swapComponentHead(component, npcID, componentKey)
     if component.visibleGlobal ~= true then
-        loggedVisible[componentKey] = nil
         writtenAnimation[componentKey] = nil
         gameAnimation[componentKey], swappedHeads[componentKey] = nil, nil
         return
     end
-    logComponentOnce(componentKey, component)
     local modelType = tonumber(component.modelType)
     local swappedHead = swappedHeads[componentKey]
-    if swappedHead ~= nil
-        and (swappedHead.npcID == npcID or modelType ~= NPC_HEAD_MODEL_TYPE or component.modelID1 ~= swappedHead.npcID) then
-        -- (still ours with the same NPC, or the game has set the head again: nothing to change)
-        if swappedHead.npcID ~= npcID then swappedHeads[componentKey] = nil end
-        swappedHead = nil
+    if swappedHead ~= nil then
+        -- The record is kept only while the component still shows the NPC we put there (the game may have set it again).
+        local stillOurs = modelType == NPC_HEAD_MODEL_TYPE and component.modelID1 == swappedHead.npcID
+        if not stillOurs then swappedHeads[componentKey] = nil end
+        -- (nothing to change if it is the NPC chosen now, or if it is no longer ours)
+        if not stillOurs or swappedHead.npcID == npcID then swappedHead = nil end
     end
     if npcID == nil then
         if swappedHead ~= nil then
@@ -241,24 +180,25 @@ local function swapComponentHead(component, npcID, componentKey)
         HeadSwap.npcVersionOfGameAnimation = npcVersionOfPlayerAnimation[gameAnimationOfLine]
     end
     swappedHeads[componentKey] = { npcID = npcID, gameAnimation = gameAnimationOfLine }
-    positionsDue[tonumber(componentKey:match("^(%d+)"))] = tickCount + 3
     component:SetModel(ui.ModelType.NPC_HEAD, npcID)
     HeadSwap.applyNpcHeadAnimation(component)
     writeHeadViewDistance(component)
 end
 
--- Calls visit(component, componentKey) for each model component of the open dialogue boxes that can show the player's head.
+-- Calls visit(component, componentKey) for the head component with this id, if it can be fetched.
+local function visitHead(visit, interface, staticID, componentKey)
+    local fetched, component = pcall(ui.Interfaces.GetComponent, ui.Interfaces, interface, staticID)
+    if fetched and component ~= nil then pcall(visit, component, componentKey) end
+end
+
+-- Calls visit(component, componentKey) for each head component of the open dialogue boxes that can show the player's head.
 local function forEachOpenHeadComponent(visit)
-    for _, interface in ipairs(PLAYER_HEAD_INTERFACES) do
-        if isInterfaceOpen(interface) then
-            local components = modelComponents(interface)
-            if components ~= nil then
-                for position, staticID in ipairs(components.ids) do
-                    local fetched, component = pcall(ui.Interfaces.GetComponent, ui.Interfaces, interface, staticID)
-                    if fetched and component ~= nil then pcall(visit, component, components.keys[position]) end
-                end
-            end
-        end
+    if isInterfaceOpen(PLAYER_LINE_INTERFACE) then
+        visitHead(visit, PLAYER_LINE_INTERFACE, HEAD_STATIC_ID, "1191:8")
+    end
+    if isInterfaceOpen(PAIR_INTERFACE) then
+        visitHead(visit, PAIR_INTERFACE, HEAD_STATIC_ID, "1187:8")
+        visitHead(visit, PAIR_INTERFACE, PAIR_SECOND_HEAD_STATIC_ID, "1187:13")
     end
 end
 
@@ -282,27 +222,6 @@ end
 -- Every frame (a Draw event: the game sets the player's head again whenever it fills or lays out a box). Does nothing
 -- until a dialogue box is open, and leaves out what isn't needed (the NPC's own animation is only used with an NPC head).
 function HeadSwap.tick()
-    -- TEMPORARY LOG (dev only): runs whatever the settings are, so the components are logged even when the rest is idle.
-    tickCount = tickCount + 1
-    for _, interface in ipairs({ 1191, 1187, 1184 }) do
-        if isInterfaceOpen(interface) then
-            local logged = modelComponents(interface)
-            if logged ~= nil then
-                if positionsDue[interface] ~= nil and tickCount >= positionsDue[interface] then
-                    positionsDue[interface] = nil
-                    logPositions(interface, logged)
-                end
-                for position, staticID in ipairs(logged.ids) do
-                    local fetched, component = pcall(ui.Interfaces.GetComponent, ui.Interfaces, interface, staticID)
-                    if fetched and component ~= nil and component.visibleGlobal == true then
-                        logComponentOnce(logged.keys[position], component)
-                    elseif fetched then
-                        loggedVisible[logged.keys[position]] = nil
-                    end
-                end
-            end
-        end
-    end
     local npcID = Settings.chosenNpcID
     if npcID ~= nil and isInterfaceOpen(NPC_SPEECH_INTERFACE) then pcall(learnNpcSpeechAnimation) end
     -- (nothing to do with no NPC, no animation chosen and normal size)
@@ -316,7 +235,6 @@ end
 
 -- Logout: the boxes are gone, so what was found about them is looked up again.
 function HeadSwap.reset()
-    modelComponentsOfInterface = {}
     writtenAnimation, gameAnimation, swappedHeads = {}, {}, {}
 end
 
