@@ -219,23 +219,75 @@ function HeadSwap.refreshHeadViewDistance()
     forEachOpenHeadComponent(scaleHeadVisit)
 end
 
--- Every frame (a Draw event: the game sets the player's head again whenever it fills or lays out a box). Does nothing
--- until a dialogue box is open, and leaves out what isn't needed (the NPC's own animation is only used with an NPC head).
-function HeadSwap.tick()
-    local npcID = Settings.chosenNpcID
-    if npcID ~= nil and isInterfaceOpen(NPC_SPEECH_INTERFACE) then pcall(learnNpcSpeechAnimation) end
-    -- (nothing to do with no NPC, no animation chosen and normal size)
-    if npcID == nil and Settings.chosenAnimationID == nil and Settings.headViewDistance == Settings.DEFAULT_HEAD_VIEW_DISTANCE
-        and next(writtenAnimation) == nil and next(swappedHeads) == nil then
-        return
+-- EXPERIMENT (dev only): a box is handled once, when it opens (and when the player changes the head, the animation or the
+-- size), instead of every frame. Whether the game clears the changes while a box stays open is what is being tried.
+local handledBoxes = {} -- interface -> true while it is open and has been handled
+
+-- The head components of a box that has opened, swapped once.
+local function handleBox(interface)
+    npcIDToShow = Settings.chosenNpcID
+    if interface == PLAYER_LINE_INTERFACE then
+        visitHead(swapHeadVisit, PLAYER_LINE_INTERFACE, HEAD_STATIC_ID, "1191:8")
+    elseif interface == PAIR_INTERFACE then
+        visitHead(swapHeadVisit, PAIR_INTERFACE, HEAD_STATIC_ID, "1187:8")
+        visitHead(swapHeadVisit, PAIR_INTERFACE, PAIR_SECOND_HEAD_STATIC_ID, "1187:13")
+    elseif npcIDToShow ~= nil then
+        learnNpcSpeechAnimation()
     end
-    npcIDToShow = npcID
+end
+
+-- What a closed box leaves behind is let go (the game fills it again when it opens).
+local function forgetBox(interface)
+    handledBoxes[interface] = nil
+    if interface == PLAYER_LINE_INTERFACE then
+        writtenAnimation["1191:8"], gameAnimation["1191:8"], swappedHeads["1191:8"] = nil, nil, nil
+    elseif interface == PAIR_INTERFACE then
+        for _, componentKey in ipairs({ "1187:8", "1187:13" }) do
+            writtenAnimation[componentKey], gameAnimation[componentKey], swappedHeads[componentKey] = nil, nil, nil
+        end
+    end
+end
+
+-- The player changed the head or the animation: the boxes open now follow.
+function HeadSwap.refreshOpenBoxes()
+    npcIDToShow = Settings.chosenNpcID
     forEachOpenHeadComponent(swapHeadVisit)
+    if npcIDToShow ~= nil and isInterfaceOpen(NPC_SPEECH_INTERFACE) then pcall(learnNpcSpeechAnimation) end
+end
+
+-- Every frame (a Draw event): looks for a box that has just opened and handles it once.
+function HeadSwap.tick()
+    if isInterfaceOpen(PLAYER_LINE_INTERFACE) then
+        if not handledBoxes[PLAYER_LINE_INTERFACE] then
+            handledBoxes[PLAYER_LINE_INTERFACE] = true
+            pcall(handleBox, PLAYER_LINE_INTERFACE)
+        end
+    elseif handledBoxes[PLAYER_LINE_INTERFACE] then
+        forgetBox(PLAYER_LINE_INTERFACE)
+    end
+    if isInterfaceOpen(PAIR_INTERFACE) then
+        if not handledBoxes[PAIR_INTERFACE] then
+            handledBoxes[PAIR_INTERFACE] = true
+            pcall(handleBox, PAIR_INTERFACE)
+        end
+    elseif handledBoxes[PAIR_INTERFACE] then
+        forgetBox(PAIR_INTERFACE)
+    end
+    if Settings.chosenNpcID ~= nil then
+        if isInterfaceOpen(NPC_SPEECH_INTERFACE) then
+            if not handledBoxes[NPC_SPEECH_INTERFACE] then
+                handledBoxes[NPC_SPEECH_INTERFACE] = true
+                pcall(handleBox, NPC_SPEECH_INTERFACE)
+            end
+        else
+            handledBoxes[NPC_SPEECH_INTERFACE] = nil
+        end
+    end
 end
 
 -- Logout: the boxes are gone, so what was found about them is looked up again.
 function HeadSwap.reset()
-    writtenAnimation, gameAnimation, swappedHeads = {}, {}, {}
+    writtenAnimation, gameAnimation, swappedHeads, handledBoxes = {}, {}, {}, {}
 end
 
 return HeadSwap
