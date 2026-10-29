@@ -64,7 +64,19 @@ local function modelComponents(interface)
         end
     end
     modelComponentsOfInterface[interface] = components
+    print(("[make_me_a_monster] COMPONENTS interface %d model component static ids: %s"):format(interface,
+        table.concat(components.ids, ",")))
     return components
+end
+
+-- TEMPORARY LOG (dev only): what each head component holds the first time it is visible in a dialogue.
+local loggedVisible = {}
+local function logComponentOnce(componentKey, component)
+    if loggedVisible[componentKey] then return end
+    loggedVisible[componentKey] = true
+    print(("[make_me_a_monster] COMPONENTS %s visible: modelType %s modelID1 %s viewDistance %s animID %s"):format(
+        componentKey, tostring(component.modelType), tostring(component.modelID1), tostring(component.viewDistance),
+        tostring(component.animID)))
 end
 
 -- Whether an interface is open now. (Checked first each frame, so a closed box costs nothing more.)
@@ -117,8 +129,10 @@ end
 local function learnNpcSpeechAnimation()
     local components = modelComponents(NPC_SPEECH_INTERFACE)
     if components == nil then return end
-    for _, staticID in ipairs(components.ids) do
+    for position, staticID in ipairs(components.ids) do
         local component = ui.Interfaces:GetComponent(NPC_SPEECH_INTERFACE, staticID)
+        if component.visibleGlobal == true then logComponentOnce(components.keys[position], component)
+        else loggedVisible[components.keys[position]] = nil end
         if component.visibleGlobal == true and tonumber(component.modelType) == NPC_HEAD_MODEL_TYPE then
             local animationID = tonumber(component.animID)
             if animationID ~= nil and animationID >= 0 and animationID ~= Settings.lastSeenNpcAnimationID then
@@ -151,10 +165,12 @@ end
 -- player's own head stays, playing the animation the player picked. Either way it is drawn at the size set.
 local function swapComponentHead(component, npcID, componentKey)
     if component.visibleGlobal ~= true then
+        loggedVisible[componentKey] = nil
         writtenAnimation[componentKey] = nil
         gameAnimation[componentKey], swappedHeads[componentKey] = nil, nil
         return
     end
+    logComponentOnce(componentKey, component)
     local modelType = tonumber(component.modelType)
     local swappedHead = swappedHeads[componentKey]
     if swappedHead ~= nil
