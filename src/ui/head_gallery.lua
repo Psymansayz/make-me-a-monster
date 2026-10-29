@@ -256,9 +256,15 @@ local function applySearch()
 end
 
 -- The size the window opens at when it has no saved size: five cells across and four down, at their starting size.
-function HeadGallery.defaultSize()
-    return COLUMNS * START_CELL_W + (COLUMNS - 1) * GAP + PAD * 2 + BORDERS,
-        ROWS * START_CELL_H + (ROWS - 1) * GAP + PAD * 2 + NAV_HEIGHT + 4 + TITLE_AND_BOTTOM
+-- The window's size scales with the game window (`parent`): that cell size, made larger or smaller to take up about
+-- WIDTH_SHARE of its width or HEIGHT_SHARE of its height, whichever comes first.
+local WIDTH_SHARE, HEIGHT_SHARE = 0.45, 0.75
+
+function HeadGallery.defaultSize(parent)
+    local width = COLUMNS * START_CELL_W + (COLUMNS - 1) * GAP + PAD * 2 + BORDERS
+    local height = ROWS * START_CELL_H + (ROWS - 1) * GAP + PAD * 2 + NAV_HEIGHT + 4 + TITLE_AND_BOTTOM
+    local scale = math.min(parent.width * WIDTH_SHARE / width, parent.height * HEIGHT_SHARE / height)
+    return math.floor(width * scale), math.floor(height * scale)
 end
 
 -- The heads shown play the animation now wanted (it was changed while the window is open).
@@ -284,7 +290,7 @@ end
 
 function HeadGallery.open(PrettyUI, parent, heads, current, onPick, nameOf)
     if state ~= nil then HeadGallery.close() end
-    local width, height = HeadGallery.defaultSize()
+    local width, height = HeadGallery.defaultSize(parent)
     local minWidth = math.max(MIN_WIDTH, COLUMNS * MIN_CELL_W + (COLUMNS - 1) * GAP + PAD * 2 + BORDERS)
     local minHeight = ROWS * MIN_CELL_H + (ROWS - 1) * GAP + PAD * 2 + NAV_HEIGHT + 4 + TITLE_AND_BOTTOM
     -- As it was left, if it was.
