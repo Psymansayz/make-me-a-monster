@@ -29,6 +29,14 @@ local NPC_BOX = interfaceID("CHAT_V2_LEFT", 1184) -- the NPC's line: its head is
 local PLAYER_HEAD = 3 -- ui.ModelType values
 local NPC_HEAD = 2
 
+-- The listed animation that has each player animation as its twin (the lowest id if several), made once from
+-- Animations.twin and Animations.alsoFor. (The player's head animations don't play on an NPC's head, their NPC twins do.)
+local npcTwin = {}
+for npcAnim, playerAnim in pairs(Animations.twin) do
+    if npcTwin[playerAnim] == nil or npcAnim < npcTwin[playerAnim] then npcTwin[playerAnim] = npcAnim end
+end
+for playerAnim, npcAnim in pairs(Animations.alsoFor) do npcTwin[playerAnim] = npcAnim end
+
 local headStatics = {} -- interfaceID -> static ids of its model components (their type doesn't change)
 
 -- The static ids of an interface's model components, found once it is loaded; nil while it isn't.
@@ -67,14 +75,6 @@ function HeadSwap.playerHeadAnim(withNeutral)
     if chosen == nil then return withNeutral and Animations.neutral or nil end
     return HeadSwap.animForHead(chosen, true) -- (never an NPC animation: it is changed to the player's version)
 end
-
--- The listed animation that has each player animation as its twin (the lowest id if several), made once from
--- Animations.twin and Animations.alsoFor. (The player's head animations don't play on an NPC's head, their NPC twins do.)
-local npcTwin = {}
-for npcAnim, playerAnim in pairs(Animations.twin) do
-    if npcTwin[playerAnim] == nil or npcAnim < npcTwin[playerAnim] then npcTwin[playerAnim] = npcAnim end
-end
-for playerAnim, npcAnim in pairs(Animations.alsoFor) do npcTwin[playerAnim] = npcAnim end
 
 -- The animation to keep when the head changes between the player's own and an NPC's, which play different
 -- animations: for the player's own head the twin of an NPC animation; for an NPC head the animation that has this
