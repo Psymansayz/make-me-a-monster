@@ -1,8 +1,8 @@
 -- Replaces the player's chat head in the game's dialogue boxes with an NPC's head.
 --
 -- The boxes' own head components are ui.Models, so a player head (ModelType PLAYER_HEAD) is turned into an
--- NPC head with Model:SetModel. Checked every frame: the game sets the player's head again whenever it
--- fills or lays out a box, so it would otherwise flash up or come back.
+-- NPC head with Model:SetModel. A box is handled once, when it opens, and again when the player changes the head,
+-- the animation or the size: the game does not undo the changes while a box stays open.
 
 local Animations = require("src/game/animations")
 local Settings = require("src/data/settings")
@@ -219,23 +219,63 @@ function HeadSwap.refreshHeadViewDistance()
     forEachOpenHeadComponent(scaleHeadVisit)
 end
 
--- Every frame (a Draw event: the game sets the player's head again whenever it fills or lays out a box). Does nothing
--- until a dialogue box is open, and leaves out what isn't needed (the NPC's own animation is only used with an NPC head).
-function HeadSwap.tick()
-    local npcID = Settings.chosenNpcID
-    if npcID ~= nil and isInterfaceOpen(NPC_SPEECH_INTERFACE) then pcall(learnNpcSpeechAnimation) end
-    -- (nothing to do with no NPC, no animation chosen and normal size)
-    if npcID == nil and Settings.chosenAnimationID == nil and Settings.headViewDistance == Settings.DEFAULT_HEAD_VIEW_DISTANCE
-        and next(writtenAnimation) == nil and next(swappedHeads) == nil then
-        return
+local handledBoxes = {} -- interface -> true while it is open and has been handled
+
+-- The head components of a box that has opened, swapped once.
+local function handleBox(interface)
+    npcIDToShow = Settings.chosenNpcID
+    if interface == PLAYER_LINE_INTERFACE then
+        visitHead(swapHeadVisit, PLAYER_LINE_INTERFACE, HEAD_STATIC_ID, "1191:8")
+    elseif interface == PAIR_INTERFACE then
+        visitHead(swapHeadVisit, PAIR_INTERFACE, HEAD_STATIC_ID, "1187:8")
+        visitHead(swapHeadVisit, PAIR_INTERFACE, PAIR_SECOND_HEAD_STATIC_ID, "1187:13")
+    elseif npcIDToShow ~= nil then
+        learnNpcSpeechAnimation()
     end
-    npcIDToShow = npcID
-    forEachOpenHeadComponent(swapHeadVisit)
 end
 
--- Logout: the boxes are gone, so what was found about them is looked up again.
+-- What a closed box leaves behind is let go (the game fills it again when it opens).
+local function forgetBox(interface)
+    handledBoxes[interface] = nil
+    if interface == PLAYER_LINE_INTERFACE then
+        writtenAnimation["1191:8"], gameAnimation["1191:8"], swappedHeads["1191:8"] = nil, nil, nil
+    elseif interface == PAIR_INTERFACE then
+        for _, componentKey in ipairs({ "1187:8", "1187:13" }) do
+            writtenAnimation[componentKey], gameAnimation[componentKey], swappedHeads[componentKey] = nil, nil, nil
+        end
+    end
+end
+
+-- The player changed the head, the animation or the size: the boxes open now follow.
+function HeadSwap.refreshOpenDialogues()
+    npcIDToShow = Settings.chosenNpcID
+    forEachOpenHeadComponent(swapHeadVisit)
+    if npcIDToShow ~= nil and isInterfaceOpen(NPC_SPEECH_INTERFACE) then pcall(learnNpcSpeechAnimation) end
+end
+
+-- A box that has just opened is handled once; one that has closed is forgotten.
+local function watchBox(interface)
+    if isInterfaceOpen(interface) then
+        if not handledBoxes[interface] then
+            handledBoxes[interface] = true
+            pcall(handleBox, interface)
+        end
+    elseif handledBoxes[interface] then
+        forgetBox(interface)
+    end
+end
+
+-- Every frame (a Draw event): only looks for a box that has just opened or closed, three lookups. (The NPC's own
+-- animation is only used with an NPC head, so that box is watched only then.)
+function HeadSwap.tick()
+    watchBox(PLAYER_LINE_INTERFACE)
+    watchBox(PAIR_INTERFACE)
+    if Settings.chosenNpcID ~= nil then watchBox(NPC_SPEECH_INTERFACE) end
+end
+
+-- Logout: the boxes are gone.
 function HeadSwap.reset()
-    writtenAnimation, gameAnimation, swappedHeads = {}, {}, {}
+    writtenAnimation, gameAnimation, swappedHeads, handledBoxes = {}, {}, {}, {}
 end
 
 return HeadSwap

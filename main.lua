@@ -14,6 +14,7 @@ local RESULTS_SHOWN = 40 -- NPCs listed in the dropdown at once
 
 -- The heads in the windows open play the animation chosen (see HeadSwap.npcHeadAnimation).
 local function updateOpenWindows()
+    HeadSwap.refreshOpenDialogues() -- (the dialogue boxes open follow the animation chosen)
     pcall(AllHeadsWindow.updateAnimations)
     pcall(VariantsWindow.updateAnimations)
 end
@@ -219,6 +220,7 @@ local openAllHeadsWindow -- (below)
 local function chooseNpc(npcID, fromDropdown)
     Settings.setChosenNpc(npcID)
     fitAnimationToHead()
+    HeadSwap.refreshOpenDialogues() -- (the dialogue boxes open follow the head chosen)
     refreshAnimationDropdown()
     if not fromDropdown then refreshNpcDropdown() end -- (the dropdown shows it, or nothing)
     refreshStatusTexts()
