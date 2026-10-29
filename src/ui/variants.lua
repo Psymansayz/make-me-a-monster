@@ -279,7 +279,7 @@ function Variants.open(PrettyUI, parent, title, ids, current, onPick, labelFor)
     if Variants.savedSize ~= nil then
         width, height = Variants.savedSize.width, Variants.savedSize.height
     else
-        width, height = HeadGallery.defaultSize()
+        width, height = HeadGallery.defaultSize(parent)
     end
     -- (kept on the screen, and no smaller than it can be resized to)
     width = math.max(math.min(minWidth, parent.width), math.min(width, parent.width))
