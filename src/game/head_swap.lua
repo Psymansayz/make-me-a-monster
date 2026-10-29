@@ -52,7 +52,7 @@ end
 
 -- The animation an NPC's head should play (never a player's animation: they don't play on an NPC's head): the
 -- player's choice as its NPC version, else the NPC version of the animation the game set on the player's head for the
--- line (HeadSwap.playerAnim, see npcTwinOf), and only if that has none, the one last seen on a real NPC's head.
+-- line (HeadSwap.playerAnim, see npcTwin), and only if that has none, the one last seen on a real NPC's head.
 local function npcHeadAnim()
     local chosen = Settings.animOverride
     if chosen ~= nil then return HeadSwap.animForHead(chosen, false) end
@@ -68,16 +68,13 @@ function HeadSwap.playerHeadAnim(withNeutral)
     return HeadSwap.animForHead(chosen, true) -- (never an NPC animation: it is changed to the player's version)
 end
 
--- The listed animation that has this player animation as its twin (the lowest id if several), or nil. (The player's
--- head animations don't play on an NPC's head, their NPC twins do.)
-local function npcTwinOf(actorID)
-    if Animations.alsoFor[actorID] ~= nil then return Animations.alsoFor[actorID] end
-    local best = nil
-    for npcAnim, twinID in pairs(Animations.twin) do
-        if twinID == actorID and (best == nil or npcAnim < best) then best = npcAnim end
-    end
-    return best
+-- The listed animation that has each player animation as its twin (the lowest id if several), made once from
+-- Animations.twin and Animations.alsoFor. (The player's head animations don't play on an NPC's head, their NPC twins do.)
+local npcTwin = {}
+for npcAnim, playerAnim in pairs(Animations.twin) do
+    if npcTwin[playerAnim] == nil or npcAnim < npcTwin[playerAnim] then npcTwin[playerAnim] = npcAnim end
 end
+for playerAnim, npcAnim in pairs(Animations.alsoFor) do npcTwin[playerAnim] = npcAnim end
 
 -- The animation to keep when the head changes between the player's own and an NPC's, which play different
 -- animations: for the player's own head the twin of an NPC animation; for an NPC head the animation that has this
@@ -90,7 +87,7 @@ function HeadSwap.animForHead(animID, playerHead)
         return Animations.twin[animID] or Animations.fallback
     end
     if not isPlayers then return animID end
-    return npcTwinOf(animID) or npcTwinOf(Animations.fallback)
+    return npcTwin[animID] or npcTwin[Animations.fallback]
 end
 
 function HeadSwap.animate(component)
@@ -214,7 +211,7 @@ local function swap(component, npcID, key)
     -- The animation the game chose for the player's head on this line (the speaker's expression).
     local playerAnim = tonumber(anim)
     if playerAnim ~= nil and playerAnim >= 0 then
-        HeadSwap.playerAnim = npcTwinOf(playerAnim)
+        HeadSwap.playerAnim = npcTwin[playerAnim]
     end
     swapped[key] = { npc = npcID, anim = playerAnim }
     component:SetModel(ui.ModelType.NPC_HEAD, npcID)
