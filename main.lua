@@ -21,7 +21,7 @@ end
 -- The saved settings are loaded again on entering the game: the saved data may not be readable yet when the plugin
 -- starts.
 Settings.load()
-VariantsWindow.animationForNpcHeads = function() return HeadSwap.npcHeadAnimation() end
+VariantsWindow.animationForNpcHeads = function() return HeadSwap.npcHeadAnimationForWindows() end
 -- The heads in the window are NPC heads: with the player's own head in use they play the NPC version of the animation
 -- chosen (the choice itself is kept, so closing the window without picking a head leaves the player's version).
 AllHeadsWindow.animationForNpcHeads = VariantsWindow.animationForNpcHeads

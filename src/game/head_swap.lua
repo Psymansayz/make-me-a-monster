@@ -83,6 +83,12 @@ function HeadSwap.npcHeadAnimation()
     return HeadSwap.npcVersionOfGameAnimation or Settings.lastSeenNpcAnimationID
 end
 
+-- What the NPC heads in the windows play: the animation an NPC's head plays, and where that is nothing (the default
+-- animation, with no line or NPC animation known), the NPC evil laugh.
+function HeadSwap.npcHeadAnimationForWindows()
+    return HeadSwap.npcHeadAnimation() or AnimationList.npcFallback
+end
+
 -- The animation the player's own head plays for the animation chosen (which may be one for an NPC's head): its
 -- HUMAN_ACTOR twin from src/data/animation_list.lua, else evil laugh. With none chosen:
 -- the neutral one if asked for (withNeutral, for a head shown outside dialogue), else nil.
@@ -129,9 +135,11 @@ end
 
 -- Per head component, by its key (interface and static id):
 local scaledViewDistance = {} -- -> { game, written }: the view distance the game set, and the one written
+
 -- The player's own head, left in place and given the animation chosen: the animation written, and the one the game set
 -- (to put back when the choice is cleared).
 local writtenAnimation, gameAnimation = {}, {}
+
 -- A player head turned into an NPC's: -> { npcID = the NPC's id, gameAnimation = the animation the game set on the
 -- player's head }, to change the head when another NPC is chosen and to put the player's head back.
 local swappedHeads = {}
