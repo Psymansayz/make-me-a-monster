@@ -51,11 +51,15 @@ local function modelStatics(interface)
 end
 
 
--- The animation the swapped head should play: the player's choice, else the one the game set on the player's
--- head for the line (HeadSwap.playerAnim, see npcTwinOf), else the one seen on a real NPC's head, else the
--- game's own animation as it is (HeadSwap.rawPlayerAnim).
+-- The animation the swapped head should play: the player's choice, else the one the game set on the player's head
+-- for the line (HeadSwap.playerAnim, see npcTwinOf). Then, with an NPC's head chosen, the one last seen on a real NPC's
+-- head (Settings.animID) and then the game's own animation as it is (HeadSwap.rawPlayerAnim); with the player's own
+-- head, only the game's own animation (a real NPC's has nothing to do with it).
 local function wantedAnim()
-    return Settings.animOverride or HeadSwap.playerAnim or Settings.animID or HeadSwap.rawPlayerAnim
+    local wanted = Settings.animOverride or HeadSwap.playerAnim
+    if wanted ~= nil then return wanted end
+    if Settings.npcID ~= nil then return Settings.animID or HeadSwap.rawPlayerAnim end
+    return HeadSwap.rawPlayerAnim
 end
 
 -- The animation the player's own head plays for the animation chosen (which is one for an NPC's head): its
