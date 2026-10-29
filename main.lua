@@ -6,7 +6,7 @@ local NpcDirectory = require("src/game/npc_directory")
 local HeadSwap = require("src/game/head_swap")
 local VariantsWindow = require("src/ui/variants_window")
 local AllHeadsWindow = require("src/ui/all_heads_window")
-local ListedAnimations = require("src/game/listed_animations")
+local Animations = require("src/game/animations")
 
 local PrettyUI = prettyui
 
@@ -121,7 +121,7 @@ end
 local function animationStatusText()
     local chosenAnimation = Settings.chosenAnimationID
     if chosenAnimation ~= nil then
-        return "Animation: " .. (ListedAnimations.labelOf(chosenAnimation) or ("ID " .. chosenAnimation))
+        return "Animation: " .. (Animations.labelOf(chosenAnimation) or ("ID " .. chosenAnimation))
     end
     return "" -- (the default: nothing to say)
 end
@@ -151,7 +151,7 @@ end
 local function refreshAnimationDropdown()
     if pluginPage == nil then return end
     fitAnimationToHead()
-    if Settings.chosenAnimationID ~= nil and not ListedAnimations.isListed(Settings.chosenAnimationID) then
+    if Settings.chosenAnimationID ~= nil and not Animations.isListed(Settings.chosenAnimationID) then
         Settings.setChosenAnimation(nil)
         updateOpenWindows()
         refreshStatusTexts()
@@ -159,7 +159,7 @@ local function refreshAnimationDropdown()
     -- The animations for NPC heads, unless the player's own head is in use and no heads window is open (the heads
     -- in it are NPC heads, whatever head is in use).
     local npcHeads = Settings.chosenNpcID ~= nil or AllHeadsWindow.isOpen()
-    local listedAnimations = ListedAnimations.options(not npcHeads)
+    local listedAnimations = Animations.options(not npcHeads)
     local entries = {}
     listingsByEntryID = {}
     for entryID, listing in ipairs(listedAnimations) do

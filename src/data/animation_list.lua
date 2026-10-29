@@ -1,5 +1,5 @@
 -- The animations the plugin lists, in the order of the dropdown: { id, label } for the NPC heads' animations (npc)
--- and the player's own head's (player). Read by src/game/listed_animations.lua. A new animation is added here, in its place in
+-- and the player's own head's (player). Read by src/game/animations.lua. A new animation is added here, in its place in
 -- the order, once it has been checked to work. After the lists: how the two kinds of animation go with each other.
 return {
     npc = {
