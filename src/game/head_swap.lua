@@ -65,7 +65,7 @@ end
 -- The animation the player's own head plays for the animation chosen (which is one for an NPC's head): its
 -- HUMAN_ACTOR twin from src/data/animations.lua, else the one chosen as it is. With none chosen:
 -- the neutral one if asked for (withNeutral, for a head shown outside dialogue), else nil.
-function HeadSwap.ownHeadAnim(withNeutral)
+function HeadSwap.playerHeadAnim(withNeutral)
     local chosen = HeadSwap.animOverride
     if chosen == nil then return withNeutral and Animations.neutral or nil end
     return Animations.twin[chosen] or chosen
@@ -85,10 +85,10 @@ end
 -- The animation to keep when the head changes between the player's own and an NPC's, which play different
 -- animations: for the player's own head the twin of an NPC animation; for an NPC head the animation that has this
 -- one as its twin. Where there is none, evil laugh (of the kind the head plays).
-function HeadSwap.animForHead(animID, ownHead)
+function HeadSwap.animForHead(animID, playerHead)
     if animID == nil then return nil end
-    local isPlayers = Anims.isOwn(animID)
-    if ownHead then
+    local isPlayers = Anims.isPlayer(animID)
+    if playerHead then
         if isPlayers then return animID end
         return Animations.twin[animID] or Animations.fallback
     end
@@ -165,7 +165,7 @@ local function swap(component, npcID, key)
     local modelType = tonumber(component.modelType)
     if npcID == nil then
         if modelType == PLAYER_HEAD then
-            local anim = HeadSwap.ownHeadAnim(false)
+            local anim = HeadSwap.playerHeadAnim(false)
             if anim ~= nil and component.animID ~= anim then component.animID = anim end
             applyScale(key, component)
         end
