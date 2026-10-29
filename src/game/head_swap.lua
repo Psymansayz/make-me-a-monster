@@ -221,6 +221,23 @@ end
 
 local handledBoxes = {} -- interface -> true while it is open and has been handled
 
+-- A box that stays open can be filled again by the game with the next line (two lines in a row from the same side), and
+-- is not seen to close in between. The server transmits the variable CHAT_V3_UPDATE_INTERFACE (id 8180) whenever a dialogue
+-- box is updated (in the logs, a frame before the game filled it), so after it the open boxes are looked at again for a
+-- few frames: heads the game has set again are swapped again, and heads that are already ours are left alone.
+local DIALOGUE_UPDATE_VARIABLE_ID = 8180
+local FRAMES_TO_RECHECK = 5
+local framesToRecheck = 0
+
+Event.VarTransmit.Subscribe("make_me_a_monster_dialogue_update", function(event)
+    if event.var.id == DIALOGUE_UPDATE_VARIABLE_ID then framesToRecheck = FRAMES_TO_RECHECK end
+end)
+
+-- For the plugin shutting down.
+function HeadSwap.stop()
+    Event.VarTransmit.Unsubscribe("make_me_a_monster_dialogue_update")
+end
+
 -- The head components of a box that has opened, swapped once.
 local function handleBox(interface)
     npcIDToShow = Settings.chosenNpcID
@@ -265,12 +282,17 @@ local function watchBox(interface)
     end
 end
 
--- Every frame (a Draw event): only looks for a box that has just opened or closed, three lookups. (The NPC's own
--- animation is only used with an NPC head, so that box is watched only then.)
+-- Every frame (a Draw event): looks for a box that has just opened or closed (three lookups), and for a few frames after
+-- a dialogue box was updated, at the heads in the open boxes. (The NPC's own animation is only used with an NPC head,
+-- so that box is watched only then.)
 function HeadSwap.tick()
     watchBox(PLAYER_LINE_INTERFACE)
     watchBox(PAIR_INTERFACE)
     if Settings.chosenNpcID ~= nil then watchBox(NPC_SPEECH_INTERFACE) end
+    if framesToRecheck > 0 then
+        framesToRecheck = framesToRecheck - 1
+        HeadSwap.refreshOpenDialogues()
+    end
 end
 
 -- Logout: the boxes are gone.
