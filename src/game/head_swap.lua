@@ -10,7 +10,6 @@ local Animations = require("src/data/animations")
 
 local HeadSwap = {}
 
-HeadSwap.rawPlayerAnim = nil -- the same, as the game set it
 HeadSwap.playerAnim = nil   -- the animation the game last set on the player's head, before it was swapped
 
 -- Interfaces with a player head: the player's line (CHAT_V2_RIGHT) and two heads at once (CHAT_V2_PAIR).
@@ -51,24 +50,22 @@ local function modelStatics(interface)
 end
 
 
--- The animation the swapped head should play: the player's choice, else the one the game set on the player's head
--- for the line (HeadSwap.playerAnim, see npcTwinOf). Then, with an NPC's head chosen, the one last seen on a real NPC's
--- head (Settings.animID) and then the game's own animation as it is (HeadSwap.rawPlayerAnim); with the player's own
--- head, only the game's own animation (a real NPC's has nothing to do with it).
-local function wantedAnim()
-    local wanted = Settings.animOverride or HeadSwap.playerAnim
-    if wanted ~= nil then return wanted end
-    if Settings.npcID ~= nil then return Settings.animID or HeadSwap.rawPlayerAnim end
-    return HeadSwap.rawPlayerAnim
+-- The animation an NPC's head should play (never a player's animation: they don't play on an NPC's head): the
+-- player's choice as its NPC version, else the NPC version of the animation the game set on the player's head for the
+-- line (HeadSwap.playerAnim, see npcTwinOf), and only if that has none, the one last seen on a real NPC's head.
+local function npcHeadAnim()
+    local chosen = Settings.animOverride
+    if chosen ~= nil then return HeadSwap.animForHead(chosen, false) end
+    return HeadSwap.playerAnim or Settings.animID
 end
 
 -- The animation the player's own head plays for the animation chosen (which is one for an NPC's head): its
--- HUMAN_ACTOR twin from src/data/animations.lua, else the one chosen as it is. With none chosen:
+-- HUMAN_ACTOR twin from src/data/animations.lua, else evil laugh. With none chosen:
 -- the neutral one if asked for (withNeutral, for a head shown outside dialogue), else nil.
 function HeadSwap.playerHeadAnim(withNeutral)
     local chosen = Settings.animOverride
     if chosen == nil then return withNeutral and Animations.neutral or nil end
-    return Animations.twin[chosen] or chosen
+    return HeadSwap.animForHead(chosen, true) -- (never an NPC animation: it is changed to the player's version)
 end
 
 -- The listed animation that has this player animation as its twin (the lowest id if several), or nil. (The player's
@@ -97,7 +94,7 @@ function HeadSwap.animForHead(animID, playerHead)
 end
 
 function HeadSwap.animate(component)
-    local anim = wantedAnim()
+    local anim = npcHeadAnim()
     if anim ~= nil and component.animID ~= anim then component.animID = anim end
 end
 
@@ -125,7 +122,7 @@ end
 
 -- The animation id the swapped head plays (or nil), for other windows showing NPC heads.
 function HeadSwap.currentAnim()
-    return wantedAnim()
+    return npcHeadAnim()
 end
 
 local scaled = {} -- component key -> { original, written }: the view distance the game set, and the one written
@@ -193,7 +190,7 @@ local function swap(component, npcID, key)
     -- The animation the game chose for the player's head on this line (the speaker's expression).
     local playerAnim = tonumber(anim)
     if playerAnim ~= nil and playerAnim >= 0 then
-        HeadSwap.rawPlayerAnim, HeadSwap.playerAnim = playerAnim, npcTwinOf(playerAnim)
+        HeadSwap.playerAnim = npcTwinOf(playerAnim)
     end
     component:SetModel(ui.ModelType.NPC_HEAD, npcID)
     HeadSwap.animate(component)

@@ -24,7 +24,7 @@ Settings.load()
 Variants.animFor = function() return HeadSwap.currentAnim() end
 -- The heads in the window are NPC heads: with the player's own head in use they play the NPC version of the animation
 -- chosen (the choice itself is kept, so closing the window without picking a head leaves the player's version).
-HeadGallery.animFor = function() return HeadSwap.animForHead(HeadSwap.currentAnim(), false) end
+HeadGallery.animFor = Variants.animFor
 Variants.animForPlayer = function() return HeadSwap.playerHeadAnim(true) end
 
 local page = nil -- the plugin page's controls: { view, search, combo, status, progress }
