@@ -285,6 +285,7 @@ function HeadFlaggingWindow.open(PrettyUI, parent, heads, nameOf, animFor, optio
             onClose = function()
                 if windowState == openedState then
                     destroyCells()
+                    Event.Draw.Unsubscribe("make_me_a_monster_head_flagging_window")
                     windowState = nil
                 end
             end,
@@ -319,6 +320,7 @@ function HeadFlaggingWindow.open(PrettyUI, parent, heads, nameOf, animFor, optio
     end)
     if not okNav then say("could not make the controls: " .. tostring(errNav)) end
     showPage()
+    Event.Draw.Subscribe("make_me_a_monster_head_flagging_window", function() pcall(HeadFlaggingWindow.tick) end)
     return true
 end
 
@@ -326,11 +328,12 @@ function HeadFlaggingWindow.close()
     if windowState == nil then return end
     local window = windowState.window
     destroyCells()
+    Event.Draw.Unsubscribe("make_me_a_monster_head_flagging_window")
     windowState = nil
     pcall(function() window:Destroy() end)
 end
 
--- Every frame: what the buttons and boxes asked for (done here, not inside their own handlers), and the cells
+-- Every frame while the window is open: what the buttons and boxes asked for (done here, not inside their own handlers), and the cells
 -- fitted to the window's size.
 function HeadFlaggingWindow.tick()
     if windowState == nil or windowState.window == nil then return end

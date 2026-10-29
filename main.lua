@@ -554,10 +554,7 @@ Event.Draw.Subscribe("make_me_a_monster_draw", function()
         end
     end
     if engaged then pcall(finalizeGroups) end
-    pcall(VariantsWindow.tick)
-    pcall(AllHeadsWindow.tick)
     if DEBUG_HEAD_BROWSER then
-        pcall(HeadFlaggingWindow.tick)
         pcall(continueAnimationBrowser)
     end
     local succeeded, errorMessage = pcall(HeadSwap.tick)
