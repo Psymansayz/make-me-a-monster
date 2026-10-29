@@ -53,6 +53,7 @@ VariantsWindow.animationForPlayerHead = function() return HeadSwap.playerHeadAni
 local engaged = false
 
 local pluginPage = nil -- the plugin page's controls: { view, search, combo, status, progress }
+local matchedMembersByEntryID = {} -- entry id -> the name of the group that matched the search (a member), or nil
 local groupsByEntryID = {} -- entry id -> the group (every NPC of one name) the dropdown lists now
 local listingsByEntryID = {} -- entry id -> the animation the animation dropdown lists
 local isRefreshingNpcDropdown = false
@@ -221,10 +222,15 @@ local function refreshNpcDropdown()
         if not alreadyListed then table.insert(matchingGroups, 1, activeGroup) end
     end
     local entries = {}
-    groupsByEntryID = {}
+    groupsByEntryID, matchedMembersByEntryID = {}, {}
     for entryID, npcGroup in ipairs(matchingGroups) do
-        entries[#entries + 1] = { label = NpcDirectory.labelOfGroup(npcGroup, #visibleIds(npcGroup)), id = entryID }
+        -- While searching, an entry shows the name that matched, if it was one name of the group.
+        local matchedMember = NpcDirectory.memberMatching(npcGroup, query)
+        local label = matchedMember and NpcDirectory.labelOfMember(matchedMember)
+            or NpcDirectory.labelOfGroup(npcGroup, #visibleIds(npcGroup))
+        entries[#entries + 1] = { label = label, id = entryID }
         groupsByEntryID[entryID] = npcGroup
+        matchedMembersByEntryID[entryID] = matchedMember
     end
     local chosenGroup = Settings.chosenNpcID and NpcDirectory.groupOfNpc(Settings.chosenNpcID) or nil
     local selected = findSelectedEntryID(groupsByEntryID, function(npcGroup) return npcGroup == chosenGroup end)
@@ -314,8 +320,10 @@ local function buildPage(pluginLayer)
             local npcGroup = groupsByEntryID[entryID]
             if isRefreshingNpcDropdown or not isSelectionEvent(eventType) or npcGroup == nil then return end
             coverDropdownText(pageControls.npcDropdown, false)
-            -- The first variant that has a head (the lowest id may be blank).
-            chooseNpc(visibleIds(npcGroup)[1] or npcGroup.ids[1], true)
+            -- The first NPC of the name that matched the search, else the first of the group that has a head (the lowest
+            -- id may be blank).
+            local matchedMember = matchedMembersByEntryID[entryID]
+            chooseNpc(matchedMember and matchedMember.ids[1] or visibleIds(npcGroup)[1] or npcGroup.ids[1], true)
         end,
     })
     showTextWhenClicked(pageControls.npcDropdown)
