@@ -371,11 +371,8 @@ openAllHeadsWindow = function()
     if pluginPage then pcall(function() pluginPage.noticeText.content = noticeText end) end
 end
 
-Event.Draw.Subscribe("make_me_a_monster_draw", function()
-    pcall(VariantsWindow.tick)
-    pcall(AllHeadsWindow.tick)
-    pcall(HeadSwap.tick)
-end)
+-- The only thing run every frame (the windows run themselves while they are open).
+Event.Draw.Subscribe("make_me_a_monster_draw", HeadSwap.tick)
 
 Event.GameStateChanged.Subscribe("make_me_a_monster_state", function(event)
     if event.newState == 30 then

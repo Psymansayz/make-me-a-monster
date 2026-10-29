@@ -308,6 +308,7 @@ function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPic
                 if windowState == openedState then
                     reportWindowPlacement(openedState)
                     destroyCells()
+                    Event.Draw.Unsubscribe("make_me_a_monster_variants_window")
                     windowState, pendingPageChange = nil, 0
                 end
             end,
@@ -332,6 +333,7 @@ function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPic
         openedState.nav.buttons = { previousButton, nextButton }
     end)
     showPage()
+    Event.Draw.Subscribe("make_me_a_monster_variants_window", function() pcall(VariantsWindow.tick) end)
     return true
 end
 
@@ -340,11 +342,12 @@ function VariantsWindow.close()
     local window = windowState.window
     reportWindowPlacement(windowState)
     destroyCells()
+    Event.Draw.Unsubscribe("make_me_a_monster_variants_window")
     windowState, pendingPageChange = nil, 0
     pcall(function() window:Destroy() end)
 end
 
--- Every frame: turns the page, and fits the cells to the window's size.
+-- Every frame while the window is open: turns the page, and fits the cells to the window's size.
 function VariantsWindow.tick()
     applyPageChange()
     if windowState ~= nil and windowState.window ~= nil then

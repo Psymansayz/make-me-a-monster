@@ -42,30 +42,35 @@ for playerAnimation, npcAnimation in pairs(AnimationList.alsoFor) do
     npcVersionOfPlayerAnimation[playerAnimation] = npcAnimation
 end
 
-local modelComponentIDsOfInterface = {} -- interface id -> static ids of its model components (their type doesn't change)
+-- interface id -> { ids = static ids of its model components (their type doesn't change), keys = their keys }
+local modelComponentsOfInterface = {}
 
--- The static ids of an interface's model components, found once it is loaded; nil while it isn't.
-local function modelComponentIDs(interface)
-    local componentIDs = modelComponentIDsOfInterface[interface]
-    if componentIDs ~= nil then return componentIDs end
-    if ui.Interfaces:GetInterface(interface) == nil then return nil end
-    componentIDs = {}
+-- The model components of an interface, found once it is loaded; nil while it isn't.
+local function modelComponents(interface)
+    local components = modelComponentsOfInterface[interface]
+    if components ~= nil then return components end
+    local fetched, interfaceObject = pcall(ui.Interfaces.GetInterface, ui.Interfaces, interface)
+    if not fetched or interfaceObject == nil then return nil end
+    components = { ids = {}, keys = {} }
     local MODEL = ui.ComponentType.MODEL
     for staticID = 0, MAX_COMPONENT_SCAN_ID do
         local succeeded, isModel = pcall(function()
             local component = ui.Interfaces:GetComponent(interface, staticID)
             return component ~= nil and component.type == MODEL
         end)
-        if succeeded and isModel then componentIDs[#componentIDs + 1] = staticID end
+        if succeeded and isModel then
+            components.ids[#components.ids + 1] = staticID
+            components.keys[#components.keys + 1] = interface .. ":" .. staticID
+        end
     end
-    modelComponentIDsOfInterface[interface] = componentIDs
-    return componentIDs
+    modelComponentsOfInterface[interface] = components
+    return components
 end
 
--- Whether an interface is open now (a cheap check, so a closed box costs nothing each frame).
+-- Whether an interface is open now. (Checked first each frame, so a closed box costs nothing more.)
 local function isInterfaceOpen(interface)
-    local succeeded, isOpen = pcall(function() return ui.Interfaces:GetInterface(interface) ~= nil end)
-    return succeeded and isOpen
+    local fetched, interfaceObject = pcall(ui.Interfaces.GetInterface, ui.Interfaces, interface)
+    return fetched and interfaceObject ~= nil
 end
 
 -- The animation an NPC's head should play (never a player's animation: they don't play on an NPC's head): the
@@ -107,12 +112,11 @@ function HeadSwap.applyNpcHeadAnimation(component)
     if animationID ~= nil and component.animID ~= animationID then component.animID = animationID end
 end
 
--- Notes the animation of the NPC speech box's head, for the swapped head to use.
+-- Notes the animation of the NPC speech box's head, for the swapped head to use. (Called while that box is open.)
 local function learnNpcSpeechAnimation()
-    if not isInterfaceOpen(NPC_SPEECH_INTERFACE) then return end
-    local componentIDs = modelComponentIDs(NPC_SPEECH_INTERFACE)
-    if componentIDs == nil then return end
-    for _, staticID in ipairs(componentIDs) do
+    local components = modelComponents(NPC_SPEECH_INTERFACE)
+    if components == nil then return end
+    for _, staticID in ipairs(components.ids) do
         local component = ui.Interfaces:GetComponent(NPC_SPEECH_INTERFACE, staticID)
         if component.visibleGlobal == true and tonumber(component.modelType) == NPC_HEAD_MODEL_TYPE then
             local animationID = tonumber(component.animID)
@@ -226,23 +230,24 @@ local function swapComponentHead(component, npcID, componentKey)
     applyHeadScale(componentKey, component)
 end
 
--- Every frame.
+-- Every frame (a Draw event: the game sets the player's head again whenever it fills or lays out a box). Does nothing
+-- until a dialogue box is open, and leaves out what isn't needed (the NPC's own animation is only used with an NPC head).
 function HeadSwap.tick()
     local npcID = Settings.chosenNpcID
-    if npcID ~= nil then pcall(learnNpcSpeechAnimation) end -- (the NPC's own animation is only used with an NPC's head)
+    if npcID ~= nil and isInterfaceOpen(NPC_SPEECH_INTERFACE) then pcall(learnNpcSpeechAnimation) end
     -- (nothing to do with no NPC, no animation chosen, normal size and nothing left to put back)
     if npcID == nil and Settings.chosenAnimationID == nil and Settings.headScale <= 1 and next(scaledViewDistance) == nil
         and next(writtenAnimation) == nil and next(swappedHeads) == nil then
         return
     end
     for _, interface in ipairs(PLAYER_HEAD_INTERFACES) do
-        local succeeded, componentIDs = false, nil
-        if isInterfaceOpen(interface) then succeeded, componentIDs = pcall(modelComponentIDs, interface) end
-        if succeeded and componentIDs ~= nil then
-            for _, staticID in ipairs(componentIDs) do
-                pcall(function()
-                    swapComponentHead(ui.Interfaces:GetComponent(interface, staticID), npcID, interface .. ":" .. staticID)
-                end)
+        if isInterfaceOpen(interface) then
+            local components = modelComponents(interface)
+            if components ~= nil then
+                for position, staticID in ipairs(components.ids) do
+                    local fetched, component = pcall(ui.Interfaces.GetComponent, ui.Interfaces, interface, staticID)
+                    if fetched and component ~= nil then pcall(swapComponentHead, component, npcID, components.keys[position]) end
+                end
             end
         end
     end
@@ -250,7 +255,7 @@ end
 
 -- Logout: the boxes are gone, so what was found about them is looked up again.
 function HeadSwap.reset()
-    modelComponentIDsOfInterface = {}
+    modelComponentsOfInterface = {}
     scaledViewDistance, writtenAnimation, gameAnimation, swappedHeads = {}, {}, {}, {}
 end
 

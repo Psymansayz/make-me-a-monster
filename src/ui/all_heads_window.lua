@@ -328,6 +328,7 @@ function AllHeadsWindow.open(PrettyUI, parent, heads, current, onPick, nameOf)
                 if windowState == openedState then
                     reportWindowPlacement(openedState)
                     destroyCells()
+                    Event.Draw.Unsubscribe("make_me_a_monster_all_heads_window")
                     windowState = nil
                     if AllHeadsWindow.onClosed then pcall(AllHeadsWindow.onClosed) end
                 end
@@ -359,6 +360,7 @@ function AllHeadsWindow.open(PrettyUI, parent, heads, current, onPick, nameOf)
         navigation.label.rgba = TEXT_LIGHT
     end)
     showPage()
+    Event.Draw.Subscribe("make_me_a_monster_all_heads_window", function() pcall(AllHeadsWindow.tick) end)
     return true
 end
 
@@ -367,12 +369,13 @@ function AllHeadsWindow.close()
     local window = windowState.window
     reportWindowPlacement(windowState)
     destroyCells()
+    Event.Draw.Unsubscribe("make_me_a_monster_all_heads_window")
     windowState = nil
     pcall(function() window:Destroy() end)
     if AllHeadsWindow.onClosed then pcall(AllHeadsWindow.onClosed) end
 end
 
--- Every frame: does what the buttons and boxes asked for (not inside their own handlers), and fits the cells to the
+-- Every frame while the window is open: does what the buttons and boxes asked for (not inside their own handlers), and fits the cells to the
 -- window's size.
 function AllHeadsWindow.tick()
     if windowState == nil or windowState.window == nil then return end
