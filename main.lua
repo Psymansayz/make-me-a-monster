@@ -162,7 +162,7 @@ end
 -- The chosen animation changed to one the head in use plays, when the player's own head and an NPC's are switched
 -- between (they play different animations, see HeadSwap.animForHead).
 local function fitAnimToHead()
-    if not Anims.done or Settings.animOverride == nil then return end
+    if Settings.animOverride == nil then return end
     -- (with the player's own head and the heads window open, the animation stays as it is until the window closes)
     if Settings.npcID == nil and HeadGallery.isOpen() then return end
     local fitted = HeadSwap.animForHead(Settings.animOverride, Settings.npcID == nil)
@@ -172,12 +172,12 @@ local function fitAnimToHead()
     end
 end
 
--- The animation dropdown filled with the animations for the head in use (the player's own: for the NPC heads'
--- ones, as the lists show them, in name order), the chosen one selected. A choice saved earlier that is no longer on the whitelist is cleared once they are read.
+-- The animation dropdown filled with the animations for the head in use (the player's own, or the NPC heads'), in
+-- label order, the chosen one selected. A choice saved earlier that is no longer listed is cleared.
 local function refreshAnimations()
     if page == nil then return end
     fitAnimToHead()
-    if Anims.done and Settings.animOverride ~= nil and Anims.find(Settings.animOverride) == nil then
+    if Settings.animOverride ~= nil and Anims.find(Settings.animOverride) == nil then
         Settings.setAnimOverride(nil)
         applyAnimChoice()
         refreshStatus()
@@ -185,11 +185,7 @@ local function refreshAnimations()
     -- The animations for NPC heads, unless the player's own head is in use and no heads window is open (the heads
     -- in it are NPC heads, whatever head is in use).
     local npcHeads = Settings.npcID ~= nil or HeadGallery.isOpen()
-    local found = Anims.search("", math.huge, not npcHeads)
-    table.sort(found, function(a, b)
-        if a.label ~= b.label then return a.label < b.label end
-        return a.id < b.id
-    end)
+    local found = Anims.options(not npcHeads)
     local entries = {}
     shownAnimations = {}
     for index, anim in ipairs(found) do
@@ -293,7 +289,6 @@ end
 local function buildPage(parent)
     -- The saved list of heads (src/data/heads.lua): nothing is read from the game.
     if not Npcs.loaded then Npcs.load(require("src/data/heads")) end
-    pcall(Anims.load) -- (about a hundred lookups: the animation dropdown needs them)
     local view = PrettyUI.SimpleView.new(parent, { width = parent.width, height = parent.height })
     view:AddTitle("Make Me A Monster")
     view:AddText("Pick an NPC: its head replaces yours in dialogue boxes.")

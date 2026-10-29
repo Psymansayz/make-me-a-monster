@@ -4,7 +4,6 @@
 -- NPC head with Model:SetModel. Checked every frame: the game sets the player's head again whenever it
 -- fills or lays out a box, so it would otherwise flash up or come back.
 
-local Anims = require("src/game/anims")
 local PlayerAnims = require("src/data/player_head_animations")
 
 local HeadSwap = {}
@@ -56,34 +55,10 @@ end
 
 
 -- The animation the swapped head should play: the player's choice, else the one the game set on the player's
--- head for the line (HeadSwap.playerAnim, see npcVersion), else the one seen on a real NPC's head, else the
+-- head for the line (HeadSwap.playerAnim, see npcTwinOf), else the one seen on a real NPC's head, else the
 -- game's own animation as it is (HeadSwap.rawPlayerAnim).
 local function wantedAnim()
     return HeadSwap.animOverride or HeadSwap.playerAnim or HeadSwap.learnedAnim or HeadSwap.rawPlayerAnim
-end
-
--- The name of an animation, for the log.
-local function animName(animID)
-    local ok, name = pcall(function() return config.Seq.FromID(animID).configName end)
-    return ok and tostring(name) or "?"
-end
-
--- Workaround: the player's head animations named HUMAN_ACTOR_... don't play on an NPC's head, but the
--- HUMAN_UPDATE_... one for the same expression does. Chat head animations are matched by Anims.matching
--- (the names differ: ACTOR SHOCK_STANDARD is UPDATE SURPRISED_NORMAL_LEN1); others by the same name with
--- HUMAN_UPDATE for HUMAN_ACTOR. The id of that one if it exists; the id given if it isn't a HUMAN_ACTOR
--- one; else nil (the last NPC's animation is used instead).
-local function npcVersion(animID)
-    local name = animName(animID)
-    if Anims.prefixOf(name) == Anims.PREFIX_OWN then
-        local match = Anims.matching(Anims.PREFIX_NPC, Anims.keyOf(name))
-        return match and match.id or nil
-    end
-    local rest = name:match("^HUMAN_ACTOR(.*)$")
-    if rest == nil then return animID end
-    local ok, other = pcall(function() return config.Seq["HUMAN_UPDATE" .. rest] end)
-    local otherID = ok and other ~= nil and tonumber(other.id) or nil
-    return otherID
 end
 
 -- The animation the player's own head plays for the animation chosen (which is one for an NPC's head): its
@@ -95,7 +70,8 @@ function HeadSwap.ownHeadAnim(withNeutral)
     return PlayerAnims.twin[chosen] or chosen
 end
 
--- The listed animation that has this player animation as its twin (the lowest id if several), or nil.
+-- The listed animation that has this player animation as its twin (the lowest id if several), or nil. (The player's
+-- head animations don't play on an NPC's head, their NPC twins do.)
 local function npcTwinOf(actorID)
     if PlayerAnims.alsoFor[actorID] ~= nil then return PlayerAnims.alsoFor[actorID] end
     local best = nil
@@ -207,7 +183,7 @@ local function swap(component, npcID, key)
     -- The animation the game chose for the player's head on this line (the speaker's expression).
     local playerAnim = tonumber(anim)
     if playerAnim ~= nil and playerAnim >= 0 then
-        HeadSwap.rawPlayerAnim, HeadSwap.playerAnim = playerAnim, npcVersion(playerAnim)
+        HeadSwap.rawPlayerAnim, HeadSwap.playerAnim = playerAnim, npcTwinOf(playerAnim)
     end
     component:SetModel(ui.ModelType.NPC_HEAD, npcID)
     HeadSwap.animate(component)
