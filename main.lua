@@ -603,7 +603,6 @@ Event.GameStateChanged.Subscribe("make_me_a_monster_state", function(e)
         refreshStatus()
     elseif e.oldState == 30 then
         HeadSwap.reset()
-        Settings.save()
     end
 end)
 
