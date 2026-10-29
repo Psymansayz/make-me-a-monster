@@ -58,11 +58,16 @@ local function destroyCells()
 end
 
 -- The window's size, handed to the settings (to be remembered), if it can be read.
-local function reportWindowSize(reportedState)
+local function reportWindowPlacement(reportedState)
     if reportedState == nil or reportedState.window == nil then return end
-    local succeeded, width, height = pcall(function() return reportedState.window.root.width, reportedState.window.root.height end)
-    if succeeded and type(width) == "number" and type(height) == "number" and width > 0 and height > 0 then
+    local root = reportedState.window.root
+    local succeeded, width, height, x, y = pcall(function() return root.width, root.height, root.x, root.y end)
+    if not succeeded then return end
+    if type(width) == "number" and type(height) == "number" and width > 0 and height > 0 then
         Settings.setGallerySize(math.floor(width), math.floor(height))
+    end
+    if type(x) == "number" and type(y) == "number" then
+        Settings.setGalleryPosition(math.max(0, math.floor(x)), math.max(0, math.floor(y)))
     end
 end
 
@@ -296,6 +301,11 @@ function AllHeadsWindow.open(PrettyUI, parent, heads, current, onPick, nameOf)
     height = math.max(math.min(minHeight, parent.height), math.min(height, parent.height))
     local x = math.max(0, math.floor((parent.width - width) / 2))
     local y = math.max(0, math.floor((parent.height - height) / 2))
+    -- Where it was left, if it was (kept on the screen).
+    if Settings.galleryX ~= nil then
+        x = math.max(0, math.min(Settings.galleryX, parent.width - width))
+        y = math.max(0, math.min(Settings.galleryY, parent.height - height))
+    end
 
     local lowered = {}
     local currentIndex = nil
@@ -316,7 +326,7 @@ function AllHeadsWindow.open(PrettyUI, parent, heads, current, onPick, nameOf)
             -- the window held is let go.
             onClose = function()
                 if windowState == openedState then
-                    reportWindowSize(openedState)
+                    reportWindowPlacement(openedState)
                     destroyCells()
                     windowState = nil
                     if AllHeadsWindow.onClosed then pcall(AllHeadsWindow.onClosed) end
@@ -355,7 +365,7 @@ end
 function AllHeadsWindow.close()
     if windowState == nil then return end
     local window = windowState.window
-    reportWindowSize(windowState)
+    reportWindowPlacement(windowState)
     destroyCells()
     windowState = nil
     pcall(function() window:Destroy() end)

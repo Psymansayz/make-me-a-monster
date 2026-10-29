@@ -13,6 +13,10 @@ Settings.variantsWidth = nil  -- the size the variants window was left at, or ni
 Settings.variantsHeight = nil
 Settings.galleryWidth = nil   -- the size the all-heads window was left at, or nil
 Settings.galleryHeight = nil
+Settings.variantsX = nil      -- where the variants window was left (its top left corner), or nil
+Settings.variantsY = nil
+Settings.galleryX = nil       -- where the all-heads window was left, or nil
+Settings.galleryY = nil
 
 -- A saved integer that isn't negative, or nil.
 local function savedInteger(settingKey)
@@ -36,6 +40,8 @@ function Settings.load()
     Settings.headScale = percent and percent / 100 or 1
     Settings.variantsWidth, Settings.variantsHeight = savedInteger("variantsWidth"), savedInteger("variantsHeight")
     Settings.galleryWidth, Settings.galleryHeight = savedInteger("galleryWidth"), savedInteger("galleryHeight")
+    Settings.variantsX, Settings.variantsY = savedInteger("variantsX"), savedInteger("variantsY")
+    Settings.galleryX, Settings.galleryY = savedInteger("galleryX"), savedInteger("galleryY")
 end
 
 -- Written when the plugin shuts down (the settings are only kept in memory until then).
@@ -48,6 +54,10 @@ function Settings.save()
     PersistentDB:SetInt("variantsHeight", Settings.variantsHeight or -1)
     PersistentDB:SetInt("galleryWidth", Settings.galleryWidth or -1)
     PersistentDB:SetInt("galleryHeight", Settings.galleryHeight or -1)
+    PersistentDB:SetInt("variantsX", Settings.variantsX or -1)
+    PersistentDB:SetInt("variantsY", Settings.variantsY or -1)
+    PersistentDB:SetInt("galleryX", Settings.galleryX or -1)
+    PersistentDB:SetInt("galleryY", Settings.galleryY or -1)
 end
 
 function Settings.setLastSeenNpcAnimation(animID)
@@ -68,6 +78,14 @@ end
 
 function Settings.setVariantsSize(width, height)
     Settings.variantsWidth, Settings.variantsHeight = width, height
+end
+
+function Settings.setGalleryPosition(x, y)
+    Settings.galleryX, Settings.galleryY = x, y
+end
+
+function Settings.setVariantsPosition(x, y)
+    Settings.variantsX, Settings.variantsY = x, y
 end
 
 function Settings.setChosenNpc(npcID)
