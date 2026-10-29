@@ -129,6 +129,9 @@ function HeadSwap.currentAnim()
 end
 
 local scaled = {} -- component key -> { original, written }: the view distance the game set, and the one written
+-- The player's own head, left in place and given the animation chosen: component key -> the animation written, and
+-- the one the game set (to put back when the choice is cleared).
+local written, gameAnim = {}, {}
 
 -- The head drawn Settings.headScale times larger by moving the camera closer: the view distance is the game's divided
 -- by the scale. The game sets the view distance itself when it fills a box, so a value other than the one written
@@ -158,14 +161,24 @@ end
 -- player's own head stays, playing the animation the player picked. Either way it is drawn at the size set.
 local function swap(component, npcID, key)
     if component.visibleGlobal ~= true then
-        scaled[key] = nil
+        scaled[key], written[key], gameAnim[key] = nil, nil, nil
         return
     end
     local modelType = tonumber(component.modelType)
     if npcID == nil then
         if modelType == PLAYER_HEAD then
+            local current = tonumber(component.animID)
+            local mine = written[key]
+            if mine == nil or current ~= mine then gameAnim[key] = current end -- (the game set it)
             local anim = HeadSwap.playerHeadAnim(false)
-            if anim ~= nil and component.animID ~= anim then component.animID = anim end
+            if anim ~= nil then
+                if current ~= anim then component.animID = anim end
+                written[key] = anim
+            elseif mine ~= nil then
+                -- The choice was cleared: the game's animation again (unless the game has set another since).
+                if current == mine and gameAnim[key] ~= nil then component.animID = gameAnim[key] end
+                written[key], gameAnim[key] = nil, nil
+            end
             applyScale(key, component)
         end
         return
@@ -192,7 +205,7 @@ function HeadSwap.tick()
     local npcID = Settings.npcID
     if npcID ~= nil then pcall(learn) end -- (the NPC's own animation is only used with an NPC's head)
     -- (nothing to do with no NPC, no animation chosen, normal size and no size left to put back)
-    if npcID == nil and Settings.animOverride == nil and Settings.headScale <= 1 and next(scaled) == nil then return end
+    if npcID == nil and Settings.animOverride == nil and Settings.headScale <= 1 and next(scaled) == nil and next(written) == nil then return end
     for _, interface in ipairs(INTERFACES) do
         local ok, statics = false, nil
         if isOpen(interface) then ok, statics = pcall(modelStatics, interface) end
