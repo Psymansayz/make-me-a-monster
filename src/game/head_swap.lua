@@ -75,18 +75,13 @@ end
 
 -- The animation an NPC's head should play (never a player's animation: they don't play on an NPC's head): the
 -- player's choice as its NPC version, else the NPC version of the animation the game set on the player's head for the
--- line (HeadSwap.npcVersionOfGameAnimation), and only if that has none, the one last seen on a real NPC's head.
--- Also what the heads in the windows play.
+-- line (HeadSwap.npcVersionOfGameAnimation), and only if that has none, the one last seen on a real NPC's head. If
+-- there is none of those either, the NPC evil laugh: an NPC's head always has an animation. Also what the heads in the
+-- windows play.
 function HeadSwap.npcHeadAnimation()
     local chosenAnimation = Settings.chosenAnimationID
     if chosenAnimation ~= nil then return HeadSwap.animationForHead(chosenAnimation, false) end
-    return HeadSwap.npcVersionOfGameAnimation or Settings.lastSeenNpcAnimationID
-end
-
--- What the NPC heads in the windows play: the animation an NPC's head plays, and where that is nothing (the default
--- animation, with no line or NPC animation known), the NPC evil laugh.
-function HeadSwap.npcHeadAnimationForWindows()
-    return HeadSwap.npcHeadAnimation() or AnimationList.npcFallback
+    return HeadSwap.npcVersionOfGameAnimation or Settings.lastSeenNpcAnimationID or AnimationList.npcFallback
 end
 
 -- The animation the player's own head plays for the animation chosen (which may be one for an NPC's head): its
