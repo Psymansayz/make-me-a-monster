@@ -43,7 +43,7 @@ local function toColour(colourValues) return Vector4.new(colourValues[1], colour
 
 -- The head size setting: how many times larger than normal the heads are drawn (1: normal).
 local function currentHeadScale()
-    return Settings.headScale
+    return Settings.headScaleMultiplier()
 end
 
 local function destroyCells()
@@ -203,8 +203,7 @@ local function showPage()
     if not windowState.cellsMade then
         windowState.cellsMade = true
         for position = 1, PAGE_SIZE do
-            local succeeded, errorMessage = pcall(makeCell, position)
-            if not succeeded then print("[make_me_a_monster] could not make a head cell: " .. tostring(errorMessage)) end
+            pcall(makeCell, position)
         end
     end
     windowState.page = math.max(1, math.min(windowState.pages, windowState.page))
@@ -214,8 +213,7 @@ local function showPage()
         if npcID == nil then
             emptyCell(headCell)
         else
-            local succeeded, errorMessage = pcall(fillCell, headCell, npcID)
-            if not succeeded then print("[make_me_a_monster] could not fill a head cell: " .. tostring(errorMessage)) end
+            pcall(fillCell, headCell, npcID)
         end
     end
     pcall(function()
@@ -339,11 +337,10 @@ function AllHeadsWindow.open(PrettyUI, parent, heads, current, onPick, nameOf)
     end)
     if not succeeded then
         windowState = nil
-        print("[make_me_a_monster] could not open the heads window: " .. tostring(errorMessage))
         return false
     end
     local windowContent = openedState.window.content
-    local okNav, errNav = pcall(function()
+    pcall(function()
         local navigation = openedState.nav
         navigation.turn = 0
         -- (no angle brackets in the button text: the game reads "<" as the start of a markup tag)
@@ -362,7 +359,6 @@ function AllHeadsWindow.open(PrettyUI, parent, heads, current, onPick, nameOf)
         navigation.label.font = id.Font.MUSEO_SANS_11PT_REGULAR
         navigation.label.rgba = TEXT_LIGHT
     end)
-    if not okNav then print("[make_me_a_monster] could not make the heads window's controls: " .. tostring(errNav)) end
     showPage()
     Event.Draw.Subscribe("make_me_a_monster_all_heads_window", function() pcall(AllHeadsWindow.tick) end)
     return true

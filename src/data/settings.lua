@@ -8,7 +8,11 @@ local Settings = {}
 Settings.chosenNpcID = nil -- the NPC whose head replaces the player's, or nil for none
 Settings.lastSeenNpcAnimationID = nil     -- the chat animation last seen on a real NPC's head (learned), or nil
 Settings.chosenAnimationID = nil -- the animation picked from the animation dropdown, or nil
-Settings.headScale = 1  -- how many times larger than the game draws it the head is drawn (1 to 3; saved as a percentage)
+-- The view distance the heads in the dialogue boxes are drawn at: the game's own, divided by how many times larger
+-- the head is wanted (the slider's 100% to 300%). The game's distance is taken to be this constant (2150 in every log
+-- seen) for every box. The distance itself is kept, so nothing is worked out when a dialogue box opens.
+Settings.DEFAULT_HEAD_VIEW_DISTANCE = 2150
+Settings.headViewDistance = Settings.DEFAULT_HEAD_VIEW_DISTANCE
 Settings.variantsWidth = nil  -- the size the variants window was left at, or nil
 Settings.variantsHeight = nil
 Settings.galleryWidth = nil   -- the size the all-heads window was left at, or nil
@@ -36,8 +40,7 @@ function Settings.load()
         animationID = nil
     end
     Settings.chosenAnimationID = animationID
-    local percent = savedInteger("headScale")
-    Settings.headScale = percent and percent / 100 or 1
+    Settings.headViewDistance = savedInteger("headViewDistance") or Settings.DEFAULT_HEAD_VIEW_DISTANCE
     Settings.variantsWidth, Settings.variantsHeight = savedInteger("variantsWidth"), savedInteger("variantsHeight")
     Settings.galleryWidth, Settings.galleryHeight = savedInteger("galleryWidth"), savedInteger("galleryHeight")
     Settings.variantsX, Settings.variantsY = savedInteger("variantsX"), savedInteger("variantsY")
@@ -49,7 +52,7 @@ function Settings.save()
     PersistentDB:SetInt("npcID", Settings.chosenNpcID or -1)
     PersistentDB:SetInt("animID", Settings.lastSeenNpcAnimationID or -1)
     PersistentDB:SetInt("animOverride", Settings.chosenAnimationID or -1)
-    PersistentDB:SetInt("headScale", math.floor(Settings.headScale * 100 + 0.5))
+    PersistentDB:SetInt("headViewDistance", Settings.headViewDistance)
     PersistentDB:SetInt("variantsWidth", Settings.variantsWidth or -1)
     PersistentDB:SetInt("variantsHeight", Settings.variantsHeight or -1)
     PersistentDB:SetInt("galleryWidth", Settings.galleryWidth or -1)
@@ -68,8 +71,19 @@ function Settings.setChosenAnimation(animID)
     Settings.chosenAnimationID = animID
 end
 
-function Settings.setHeadScale(scale)
-    Settings.headScale = scale
+-- The head size as the slider shows it (100 to 300, how many percent of the normal size), and its setter, which works
+-- out the view distance to keep.
+function Settings.headSizePercent()
+    return math.floor(Settings.DEFAULT_HEAD_VIEW_DISTANCE / Settings.headViewDistance * 100 + 0.5)
+end
+
+function Settings.setHeadSizePercent(percent)
+    Settings.headViewDistance = math.max(1, math.floor(Settings.DEFAULT_HEAD_VIEW_DISTANCE * 100 / percent + 0.5))
+end
+
+-- How many times larger than normal the heads are drawn (1 to 3), for the windows' heads.
+function Settings.headScaleMultiplier()
+    return Settings.DEFAULT_HEAD_VIEW_DISTANCE / Settings.headViewDistance
 end
 
 function Settings.setGallerySize(width, height)

@@ -325,16 +325,16 @@ local function buildPage(pluginLayer)
         pageView:AddSimpleButton("Debug: all animations on Hans", function() openAnimationFlaggingWindow() end)
     end
     pageControls.noticeText = pageView:AddText("")
-    pageControls.headSizeText = pageView:AddText("Head size: " .. math.floor(Settings.headScale * 100 + 0.5) .. "%")
+    pageControls.headSizeText = pageView:AddText("Head size: " .. Settings.headSizePercent() .. "%")
     pageView:AddSlider({
         min = 100,
         max = 300,
         step = 5,
-        value = math.floor(Settings.headScale * 100 + 0.5),
+        value = Settings.headSizePercent(),
         onChange = function(_, sliderValue)
             local percent = math.max(100, math.min(300, math.floor(sliderValue / 5 + 0.5) * 5))
-            Settings.setHeadScale(percent / 100)
-            HeadSwap.refreshHeadScale() -- (the heads shown now follow)
+            Settings.setHeadSizePercent(percent)
+            HeadSwap.refreshHeadViewDistance() -- (the heads shown now follow)
             pcall(function() pageControls.headSizeText.content = "Head size: " .. percent .. "%" end)
         end,
     })
@@ -459,7 +459,7 @@ openHeadFlaggingWindow = function()
                 for _, npcID in ipairs(visibleIds(npcGroup)) do heads[#heads + 1] = npcID end
             end
             table.sort(heads)
-            HeadFlaggingWindow.scaleFor = function() return Settings.headScale end
+            HeadFlaggingWindow.scaleFor = Settings.headScaleMultiplier
             HeadFlaggingWindow.open(PrettyUI, pluginLayer, heads, NpcDirectory.nameOfNpc, function() return HeadSwap.npcHeadAnimation() end)
         else
             noticeText = "The game screen isn't ready."
@@ -495,7 +495,7 @@ local function showAnimationBrowser()
         variantIDs[#variantIDs + 1] = anim.id
         names[anim.id] = anim.name
     end
-    HeadFlaggingWindow.scaleFor = function() return Settings.headScale end
+    HeadFlaggingWindow.scaleFor = Settings.headScaleMultiplier
     HeadFlaggingWindow.open(PrettyUI, pluginLayer, variantIDs, function(animID) return names[animID] end, nil, {
         title = "Debug: all animations on Hans (green: whitelisted, blue: duplicate; click to select)",
         logLabel = "animation selected",

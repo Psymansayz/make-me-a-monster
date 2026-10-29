@@ -138,17 +138,13 @@ local writtenAnimation, gameAnimation = {}, {}
 -- player's head }, to change the head when another NPC is chosen and to put the player's head back.
 local swappedHeads = {}
 
--- The head drawn Settings.headScale times larger by moving the camera closer: the view distance is the game's divided
--- by the scale. The game's distance for the heads in the dialogue boxes is taken to be this constant (2150 in every log
--- seen), so it is written without having to find out what the game set. (Only as large as the box's own space: more of
--- the head than that is cut off at its edge.)
-local GAME_VIEW_DISTANCE = 2150
-
--- Draws the head component at the size set. Done when a head is put in a box, for a player head left in place every
--- frame, and for every head shown when the size is changed.
-local function writeHeadScale(component)
-    local scaledDistance = math.max(1, math.floor(GAME_VIEW_DISTANCE / Settings.headScale + 0.5))
-    if component.viewDistance ~= scaledDistance then component.viewDistance = scaledDistance end
+-- The head is drawn larger by moving the camera closer: Settings.headViewDistance is the view distance to give it (the
+-- game's own is Settings.DEFAULT_HEAD_VIEW_DISTANCE). Only as large as the box's own space: more of the head than that
+-- is cut off at its edge.
+-- Done when a head is put in a box, for a player head left in place every frame, and for every head shown when the
+-- size is changed.
+local function writeHeadViewDistance(component)
+    if component.viewDistance ~= Settings.headViewDistance then component.viewDistance = Settings.headViewDistance end
 end
 
 -- One model component: a shown player head becomes the NPC's head. With no NPC chosen (npcID nil), the
@@ -192,7 +188,7 @@ local function swapComponentHead(component, npcID, componentKey)
                 end
                 writtenAnimation[componentKey], gameAnimation[componentKey] = nil, nil
             end
-            writeHeadScale(component)
+            writeHeadViewDistance(component)
         end
         return
     end
@@ -201,7 +197,7 @@ local function swapComponentHead(component, npcID, componentKey)
         swappedHead.npcID = npcID
         component:SetModel(ui.ModelType.NPC_HEAD, npcID)
         HeadSwap.applyNpcHeadAnimation(component)
-        writeHeadScale(component)
+        writeHeadViewDistance(component)
         return
     end
     if modelType == NPC_HEAD_MODEL_TYPE and component.modelID1 == npcID then
@@ -217,7 +213,7 @@ local function swapComponentHead(component, npcID, componentKey)
     swappedHeads[componentKey] = { npcID = npcID, gameAnimation = gameAnimationOfLine }
     component:SetModel(ui.ModelType.NPC_HEAD, npcID)
     HeadSwap.applyNpcHeadAnimation(component)
-    writeHeadScale(component)
+    writeHeadViewDistance(component)
 end
 
 -- Calls visit(component, componentKey) for each model component of the open dialogue boxes that can show the player's head.
@@ -243,12 +239,12 @@ end
 local function scaleHeadVisit(component, componentKey)
     if component.visibleGlobal == true
         and (swappedHeads[componentKey] ~= nil or tonumber(component.modelType) == PLAYER_HEAD_MODEL_TYPE) then
-        writeHeadScale(component)
+        writeHeadViewDistance(component)
     end
 end
 
 -- The head size was changed (the slider): the heads shown now are drawn at the new size.
-function HeadSwap.refreshHeadScale()
+function HeadSwap.refreshHeadViewDistance()
     forEachOpenHeadComponent(scaleHeadVisit)
 end
 
@@ -258,7 +254,7 @@ function HeadSwap.tick()
     local npcID = Settings.chosenNpcID
     if npcID ~= nil and isInterfaceOpen(NPC_SPEECH_INTERFACE) then pcall(learnNpcSpeechAnimation) end
     -- (nothing to do with no NPC, no animation chosen and normal size)
-    if npcID == nil and Settings.chosenAnimationID == nil and Settings.headScale <= 1
+    if npcID == nil and Settings.chosenAnimationID == nil and Settings.headViewDistance == Settings.DEFAULT_HEAD_VIEW_DISTANCE
         and next(writtenAnimation) == nil and next(swappedHeads) == nil then
         return
     end

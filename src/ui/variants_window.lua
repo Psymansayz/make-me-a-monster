@@ -36,10 +36,6 @@ local TEXT_LIGHT = 0xE9E5DDFF
 
 local windowState = nil -- { window, ids, page, pages, current, onPick, labelFor, cells, nav, layoutW, layoutH }
 
-local function log(message)
-    print("[make_me_a_monster] " .. message)
-end
-
 local function toColour(colourValues) return Vector4.new(colourValues[1], colourValues[2], colourValues[3], colourValues[4]) end
 
 local function destroyCells()
@@ -97,7 +93,7 @@ end
 
 -- The head size setting: how many times larger than normal the heads are drawn (1: normal).
 local function currentHeadScale()
-    return Settings.headScale
+    return Settings.headScaleMultiplier()
 end
 
 -- A cell's parts put in their places (and sized) for the geometry g.
@@ -210,8 +206,7 @@ local function showPage()
     if not windowState.cellsMade then
         windowState.cellsMade = true
         for position = 1, PAGE_SIZE do
-            local succeeded, errorMessage = pcall(makeCell, position)
-            if not succeeded then log("could not make a variant cell: " .. tostring(errorMessage)) end
+            pcall(makeCell, position)
         end
     end
     local firstHeadIndex = (windowState.page - 1) * PAGE_SIZE
@@ -220,8 +215,7 @@ local function showPage()
         if npcID == nil then
             emptyCell(headCell)
         else
-            local succeeded, errorMessage = pcall(fillCell, headCell, npcID)
-            if not succeeded then log("could not fill a variant cell: " .. tostring(errorMessage)) end
+            pcall(fillCell, headCell, npcID)
         end
     end
     pcall(function()
@@ -322,11 +316,10 @@ function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPic
     end)
     if not succeeded then
         windowState = nil
-        print("[make_me_a_monster] could not open the variants window: " .. tostring(errorMessage))
         return false
     end
     local windowContent = openedState.window.content
-    local okNav, errNav = pcall(function()
+    pcall(function()
         openedState.nav.label = ui.Text.new(windowContent)
         openedState.nav.label.maxLines = 1
         openedState.nav.label.font = id.Font.MUSEO_SANS_11PT_REGULAR
@@ -339,7 +332,6 @@ function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPic
             { x = PAD, y = 0, width = NAV_BUTTON })
         openedState.nav.buttons = { previousButton, nextButton }
     end)
-    if not okNav then log("could not make the page buttons: " .. tostring(errNav)) end
     showPage()
     Event.Draw.Subscribe("make_me_a_monster_variants_window", function() pcall(VariantsWindow.tick) end)
     return true
