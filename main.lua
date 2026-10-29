@@ -32,46 +32,20 @@ local function visibleIds(group)
 end
 local RESULTS_SHOWN = 40 -- NPCs listed in the dropdown at once (there are tens of thousands)
 
--- The animation the head plays by the player's choice.
-local function applyAnimChoice()
-    HeadSwap.animOverride = Settings.animOverride
-    -- (the heads in the windows open play it too)
+-- The heads in the windows open play the animation chosen (see HeadSwap.currentAnim).
+local function updateOpenWindows()
     pcall(HeadGallery.updateAnimations)
     pcall(Variants.updateAnimations)
 end
 
--- The saved choices, applied. (Loaded again on entering the game: the saved data may not be readable yet when
--- the plugin starts.)
-local function loadSettings()
-    Settings.load()
-    Variants.savedSize = Settings.variantsWidth and { width = Settings.variantsWidth, height = Settings.variantsHeight }
-        or nil
-    HeadGallery.savedSize = Settings.galleryWidth and { width = Settings.galleryWidth, height = Settings.galleryHeight }
-        or nil
-    HeadSwap.npcID = Settings.npcID
-    HeadSwap.scale = Settings.headScale / 100
-    applyAnimChoice()
-    HeadSwap.learnedAnim = Settings.animID
-end
-
-loadSettings()
-Variants.onResized = function(width, height)
-    Settings.setVariantsSize(width, height)
-    Variants.savedSize = { width = width, height = height }
-end
-HeadGallery.onResized = function(width, height)
-    Settings.setGallerySize(width, height)
-    HeadGallery.savedSize = { width = width, height = height }
-end
+-- The saved settings are loaded again on entering the game: the saved data may not be readable yet when the plugin
+-- starts.
+Settings.load()
 Variants.animFor = function() return HeadSwap.currentAnim() end
 -- The heads in the window are NPC heads: with the player's own head in use they play the NPC version of the animation
 -- chosen (the choice itself is kept, so closing the window without picking a head leaves the player's version).
 HeadGallery.animFor = function() return HeadSwap.animForHead(HeadSwap.currentAnim(), false) end
 Variants.animForPlayer = function() return HeadSwap.playerHeadAnim(true) end
--- The head size setting applies to the heads in the variants window and the debug window too.
-Variants.scaleFor = function() return HeadSwap.scale end
-HeadGallery.scaleFor = Variants.scaleFor
-HeadSwap.onLearned = function(animID) Settings.setAnim(animID) end
 
 -- Nothing is read from the game (its NPCs, their heads, the animations) until the plugin page is first opened:
 -- the head in dialogue needs only the saved NPC id.
@@ -192,7 +166,7 @@ local function fitAnimToHead()
     local fitted = HeadSwap.animForHead(Settings.animOverride, Settings.npcID == nil)
     if fitted ~= Settings.animOverride then
         Settings.setAnimOverride(fitted)
-        applyAnimChoice()
+        updateOpenWindows()
     end
 end
 
@@ -203,7 +177,7 @@ local function refreshAnimations()
     fitAnimToHead()
     if Settings.animOverride ~= nil and Anims.find(Settings.animOverride) == nil then
         Settings.setAnimOverride(nil)
-        applyAnimChoice()
+        updateOpenWindows()
         refreshStatus()
     end
     -- The animations for NPC heads, unless the player's own head is in use and no heads window is open (the heads
@@ -274,7 +248,6 @@ local openHeadBrowser -- (below, debug only)
 
 local function chooseNpc(npcID, fromCombo)
     Settings.setNpc(npcID)
-    HeadSwap.npcID = npcID
     fitAnimToHead()
     refreshAnimations()
     if not fromCombo then refreshResults() end -- (the dropdown shows it, or nothing)
@@ -352,16 +325,15 @@ local function buildPage(parent)
         view:AddSimpleButton("Debug: all animations on Hans", function() openAnimationBrowser() end)
     end
     made.variantsNote = view:AddText("")
-    made.sizeText = view:AddText("Head size: " .. Settings.headScale .. "%")
+    made.sizeText = view:AddText("Head size: " .. math.floor(Settings.headScale * 100 + 0.5) .. "%")
     view:AddSlider({
         min = 100,
         max = 300,
         step = 5,
-        value = Settings.headScale,
+        value = math.floor(Settings.headScale * 100 + 0.5),
         onChange = function(_, value)
             local percent = math.max(100, math.min(300, math.floor(value / 5 + 0.5) * 5))
-            Settings.setHeadScale(percent)
-            HeadSwap.scale = percent / 100
+            Settings.setHeadScale(percent / 100)
             pcall(function() made.sizeText.content = "Head size: " .. percent .. "%" end)
         end,
     })
@@ -374,14 +346,14 @@ local function buildPage(parent)
             if refreshingAnimations or not isSelected(eventType) or anim == nil then return end
             Settings.setAnimOverride(anim.id)
             setCover(made.animCombo, false)
-            applyAnimChoice()
+            updateOpenWindows()
             refreshStatus()
         end,
     })
     showOnClick(made.animCombo)
     view:AddSimpleButton("Use default animation", function()
         Settings.setAnimOverride(nil)
-        applyAnimChoice()
+        updateOpenWindows()
         refreshAnimations()
         refreshStatus()
     end)
@@ -446,7 +418,7 @@ end
 -- in use (no head picked) an NPC animation chosen meanwhile becomes the player's version of it.
 HeadGallery.onClosed = function()
     fitAnimToHead()
-    applyAnimChoice()
+    updateOpenWindows()
     refreshAnimations()
     refreshStatus()
 end
@@ -486,7 +458,7 @@ openHeadBrowser = function()
                 for _, npcID in ipairs(visibleIds(group)) do heads[#heads + 1] = npcID end
             end
             table.sort(heads)
-            HeadBrowser.scaleFor = Variants.scaleFor
+            HeadBrowser.scaleFor = function() return Settings.headScale end
             HeadBrowser.open(PrettyUI, parent, heads, Npcs.nameOf, function() return HeadSwap.currentAnim() end)
         else
             note = "The game screen isn't ready."
@@ -522,7 +494,7 @@ local function showAnimationBrowser()
         ids[#ids + 1] = anim.id
         names[anim.id] = anim.name
     end
-    HeadBrowser.scaleFor = Variants.scaleFor
+    HeadBrowser.scaleFor = function() return Settings.headScale end
     HeadBrowser.open(PrettyUI, parent, ids, function(animID) return names[animID] end, nil, {
         title = "Debug: all animations on Hans (green: whitelisted, blue: duplicate; click to select)",
         logLabel = "animation selected",
@@ -594,7 +566,7 @@ end)
 
 Event.GameStateChanged.Subscribe("make_me_a_monster_state", function(e)
     if e.newState == 30 then
-        loadSettings()
+        Settings.load()
         refreshAnimations()
         refreshStatus()
     elseif e.oldState == 30 then
