@@ -12,7 +12,7 @@ local PrettyUI = prettyui
 
 local RESULTS_SHOWN = 40 -- NPCs listed in the dropdown at once
 
--- The heads in the windows open play the animation chosen (see HeadSwap.currentAnim).
+-- The heads in the windows open play the animation chosen (see HeadSwap.npcHeadAnimation).
 local function updateOpenWindows()
     pcall(HeadGallery.updateAnimations)
     pcall(Variants.updateAnimations)
@@ -21,11 +21,11 @@ end
 -- The saved settings are loaded again on entering the game: the saved data may not be readable yet when the plugin
 -- starts.
 Settings.load()
-Variants.animFor = function() return HeadSwap.currentAnim() end
+Variants.animFor = function() return HeadSwap.npcHeadAnimation() end
 -- The heads in the window are NPC heads: with the player's own head in use they play the NPC version of the animation
 -- chosen (the choice itself is kept, so closing the window without picking a head leaves the player's version).
 HeadGallery.animFor = Variants.animFor
-Variants.animForPlayer = function() return HeadSwap.playerHeadAnim(true) end
+Variants.animForPlayer = function() return HeadSwap.playerHeadAnimation(true) end
 
 local page = nil -- the plugin page's controls: { view, search, combo, status, progress }
 local shownGroups = {} -- entry id -> the group (every NPC of one name) the dropdown lists now
@@ -119,9 +119,9 @@ local function statusText()
 end
 
 local function animStatusText()
-    local chosen = Settings.animOverride
-    if chosen ~= nil then
-        return "Animation: " .. (Anims.displayName(chosen) or ("ID " .. chosen))
+    local chosenAnimation = Settings.animOverride
+    if chosenAnimation ~= nil then
+        return "Animation: " .. (Anims.labelOf(chosenAnimation) or ("ID " .. chosenAnimation))
     end
     return "" -- (the default: nothing to say)
 end
@@ -134,14 +134,14 @@ local function refreshStatus()
 end
 
 -- The chosen animation changed to one the head in use plays, when the player's own head and an NPC's are switched
--- between (they play different animations, see HeadSwap.animForHead).
+-- between (they play different animations, see HeadSwap.animationForHead).
 local function fitAnimToHead()
     if Settings.animOverride == nil then return end
     -- (with the player's own head and the heads window open, the animation stays as it is until the window closes)
     if Settings.npcID == nil and HeadGallery.isOpen() then return end
-    local fitted = HeadSwap.animForHead(Settings.animOverride, Settings.npcID == nil)
-    if fitted ~= Settings.animOverride then
-        Settings.setAnimOverride(fitted)
+    local fittedAnimation = HeadSwap.animationForHead(Settings.animOverride, Settings.npcID == nil)
+    if fittedAnimation ~= Settings.animOverride then
+        Settings.setAnimOverride(fittedAnimation)
         updateOpenWindows()
     end
 end
@@ -151,7 +151,7 @@ end
 local function refreshAnimations()
     if page == nil then return end
     fitAnimToHead()
-    if Settings.animOverride ~= nil and Anims.find(Settings.animOverride) == nil then
+    if Settings.animOverride ~= nil and not Anims.isListed(Settings.animOverride) then
         Settings.setAnimOverride(nil)
         updateOpenWindows()
         refreshStatus()
@@ -159,17 +159,17 @@ local function refreshAnimations()
     -- The animations for NPC heads, unless the player's own head is in use and no heads window is open (the heads
     -- in it are NPC heads, whatever head is in use).
     local npcHeads = Settings.npcID ~= nil or HeadGallery.isOpen()
-    local found = Anims.options(not npcHeads)
+    local listedAnimations = Anims.options(not npcHeads)
     local entries = {}
     shownAnimations = {}
-    for index, anim in ipairs(found) do
-        entries[#entries + 1] = { label = anim.label, id = index }
-        shownAnimations[index] = anim
+    for index, listing in ipairs(listedAnimations) do
+        entries[#entries + 1] = { label = listing.label, id = index }
+        shownAnimations[index] = listing
     end
     -- (the one chosen, as its NPC version if it is one for the player's head and the list is of NPC ones)
-    local shownChoice = Settings.animOverride
-    if npcHeads then shownChoice = HeadSwap.animForHead(shownChoice, false) end
-    local selected = selectedEntry(shownAnimations, function(anim) return anim.id == shownChoice end)
+    local shownChoiceID = Settings.animOverride
+    if npcHeads then shownChoiceID = HeadSwap.animationForHead(shownChoiceID, false) end
+    local selected = selectedEntry(shownAnimations, function(listing) return listing.id == shownChoiceID end)
     refreshingAnimations = true
     pcall(function() page.animCombo:SetEntries(entries, selected) end)
     refreshingAnimations = false
@@ -304,9 +304,9 @@ local function buildPage(parent)
     made.animCombo = view:AddComboBox({
         entries = {},
         onChange = function(_, entryID, _, eventType)
-            local anim = shownAnimations[entryID]
-            if refreshingAnimations or not isSelected(eventType) or anim == nil then return end
-            Settings.setAnimOverride(anim.id)
+            local selectedListing = shownAnimations[entryID]
+            if refreshingAnimations or not isSelected(eventType) or selectedListing == nil then return end
+            Settings.setAnimOverride(selectedListing.id)
             setCover(made.animCombo, false)
             updateOpenWindows()
             refreshStatus()
