@@ -6,7 +6,7 @@ local NpcDirectory = require("src/game/npc_directory")
 local HeadSwap = require("src/game/head_swap")
 local VariantsWindow = require("src/ui/variants_window")
 local AllHeadsWindow = require("src/ui/all_heads_window")
-local ListedAnimations = require("src/game/listed_animations")
+local Animations = require("src/game/animations")
 
 local PrettyUI = prettyui
 
@@ -145,7 +145,7 @@ end
 local function animationStatusText()
     local chosenAnimation = Settings.chosenAnimationID
     if chosenAnimation ~= nil then
-        return "Animation: " .. (ListedAnimations.labelOf(chosenAnimation) or ("ID " .. chosenAnimation))
+        return "Animation: " .. (Animations.labelOf(chosenAnimation) or ("ID " .. chosenAnimation))
     end
     return "" -- (the default: nothing to say)
 end
@@ -175,7 +175,7 @@ end
 local function refreshAnimationDropdown()
     if pluginPage == nil then return end
     fitAnimationToHead()
-    if Settings.chosenAnimationID ~= nil and not ListedAnimations.isListed(Settings.chosenAnimationID) then
+    if Settings.chosenAnimationID ~= nil and not Animations.isListed(Settings.chosenAnimationID) then
         Settings.setChosenAnimation(nil)
         updateOpenWindows()
         refreshStatusTexts()
@@ -183,7 +183,7 @@ local function refreshAnimationDropdown()
     -- The animations for NPC heads, unless the player's own head is in use and no heads window is open (the heads
     -- in it are NPC heads, whatever head is in use).
     local npcHeads = Settings.chosenNpcID ~= nil or AllHeadsWindow.isOpen()
-    local listedAnimations = ListedAnimations.options(not npcHeads)
+    local listedAnimations = Animations.options(not npcHeads)
     local entries = {}
     listingsByEntryID = {}
     for entryID, listing in ipairs(listedAnimations) do
@@ -476,7 +476,7 @@ local ANIMATION_HEAD = 0
 local ANIMATION_ENTRIES_PER_LINE = 12
 local AnimationScan = require("src/debug/animation_scan")
 local Whitelist = require("src/data/animation_whitelist")
-local Animations = require("src/data/animations")
+local AnimationList = require("src/data/animation_list")
 local animationBrowserWanted = false
 
 local TINT_LISTED = { 0.10, 0.28, 0.12, 1 }     -- on the whitelist, listed in the dropdown
@@ -488,7 +488,7 @@ local function showAnimationBrowser()
     end)
     if not (succeeded and pluginLayer ~= nil) then return false end
     local variantIDs, names, listed, duplicates = {}, {}, {}, {}
-    for _, entry in ipairs(Animations.npc) do listed[entry.id] = true end
+    for _, entry in ipairs(AnimationList.npc) do listed[entry.id] = true end
     for _, animID in ipairs(Whitelist.duplicates or {}) do duplicates[animID] = true end
     for _, anim in ipairs(AnimationScan.list) do
         variantIDs[#variantIDs + 1] = anim.id

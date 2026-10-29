@@ -4,9 +4,9 @@
 -- NPC head with Model:SetModel. Checked every frame: the game sets the player's head again whenever it
 -- fills or lays out a box, so it would otherwise flash up or come back.
 
-local ListedAnimations = require("src/game/listed_animations")
+local Animations = require("src/game/animations")
 local Settings = require("src/data/settings")
-local AnimationData = require("src/data/animations")
+local AnimationList = require("src/data/animation_list")
 
 local HeadSwap = {}
 
@@ -31,14 +31,14 @@ local PLAYER_HEAD_MODEL_TYPE = 3 -- ui.ModelType values
 local NPC_HEAD_MODEL_TYPE = 2
 
 -- The listed animation that has each player animation as its twin (the lowest id if several), made once from
--- AnimationData.twin and AnimationData.alsoFor. (The player's head animations don't play on an NPC's head, their NPC
+-- AnimationList.twin and AnimationList.alsoFor. (The player's head animations don't play on an NPC's head, their NPC
 -- versions do.)
 local npcVersionOfPlayerAnimation = {}
-for npcAnimation, playerAnimation in pairs(AnimationData.twin) do
+for npcAnimation, playerAnimation in pairs(AnimationList.twin) do
     local lowestSoFar = npcVersionOfPlayerAnimation[playerAnimation]
     if lowestSoFar == nil or npcAnimation < lowestSoFar then npcVersionOfPlayerAnimation[playerAnimation] = npcAnimation end
 end
-for playerAnimation, npcAnimation in pairs(AnimationData.alsoFor) do
+for playerAnimation, npcAnimation in pairs(AnimationList.alsoFor) do
     npcVersionOfPlayerAnimation[playerAnimation] = npcAnimation
 end
 
@@ -79,11 +79,11 @@ function HeadSwap.npcHeadAnimation()
 end
 
 -- The animation the player's own head plays for the animation chosen (which may be one for an NPC's head): its
--- HUMAN_ACTOR twin from src/data/animations.lua, else evil laugh. With none chosen:
+-- HUMAN_ACTOR twin from src/data/animation_list.lua, else evil laugh. With none chosen:
 -- the neutral one if asked for (withNeutral, for a head shown outside dialogue), else nil.
 function HeadSwap.playerHeadAnimation(withNeutral)
     local chosenAnimation = Settings.chosenAnimationID
-    if chosenAnimation == nil then return withNeutral and AnimationData.neutral or nil end
+    if chosenAnimation == nil then return withNeutral and AnimationList.neutral or nil end
     -- (never an NPC animation: it is changed to the player's version)
     return HeadSwap.animationForHead(chosenAnimation, true)
 end
@@ -93,13 +93,13 @@ end
 -- one as its twin. Where there is none, evil laugh (of the kind the head plays).
 function HeadSwap.animationForHead(animationID, forPlayerHead)
     if animationID == nil then return nil end
-    local isPlayerAnimation = ListedAnimations.isPlayerAnimation(animationID)
+    local isPlayerAnimation = Animations.isPlayerAnimation(animationID)
     if forPlayerHead then
         if isPlayerAnimation then return animationID end
-        return AnimationData.twin[animationID] or AnimationData.fallback
+        return AnimationList.twin[animationID] or AnimationList.fallback
     end
     if not isPlayerAnimation then return animationID end
-    return npcVersionOfPlayerAnimation[animationID] or npcVersionOfPlayerAnimation[AnimationData.fallback]
+    return npcVersionOfPlayerAnimation[animationID] or npcVersionOfPlayerAnimation[AnimationList.fallback]
 end
 
 function HeadSwap.applyNpcHeadAnimation(component)
