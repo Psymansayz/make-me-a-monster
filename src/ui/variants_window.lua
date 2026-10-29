@@ -140,7 +140,7 @@ end
 
 -- A cell shown or hidden (all its parts).
 local function setCellHidden(headCell, hidden)
-    for _, cellPart in ipairs({ headCell.background, headCell.model, headCell.name, headCell.idLabel, headCell.click }) do
+    for _, cellPart in ipairs({ headCell.background, headCell.model, headCell.label, headCell.idLabel, headCell.click }) do
         pcall(function() cellPart.hidden = hidden end)
     end
 end
@@ -200,6 +200,9 @@ end
 local function emptyCell(headCell)
     headCell.id = nil
     setCellHidden(headCell, true)
+    -- (the texts are cleared as well, so nothing of the previous page is left in them)
+    headCell.label.content = ""
+    headCell.idLabel.content = ""
 end
 
 local function showPage()
