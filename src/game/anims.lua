@@ -6,8 +6,8 @@ local Data = require("src/data/animations")
 local Anims = {}
 
 local byID = {} -- id -> the entry { id, label } and whether it is one for the player's own head
-for _, own in ipairs({ false, true }) do
-    for _, entry in ipairs(own and Data.own or Data.npc) do byID[entry.id] = { entry = entry, own = own } end
+for _, player in ipairs({ false, true }) do
+    for _, entry in ipairs(player and Data.player or Data.npc) do byID[entry.id] = { entry = entry, player = player } end
 end
 
 -- Whether the animation with this id is listed.
@@ -22,14 +22,14 @@ function Anims.displayName(animID)
 end
 
 -- Whether the animation with this id is one for the player's own head.
-function Anims.isOwn(animID)
+function Anims.isPlayer(animID)
     local found = byID[animID]
-    return found ~= nil and found.own
+    return found ~= nil and found.player
 end
 
--- The animations for the player's own head if `own`, else those for NPC heads: { id, label }, in the order shown.
-function Anims.options(own)
-    return own and Data.own or Data.npc
+-- The animations for the player's own head if `player`, else those for NPC heads: { id, label }, in the order shown.
+function Anims.options(player)
+    return player and Data.player or Data.npc
 end
 
 return Anims

@@ -67,7 +67,7 @@ Variants.animFor = function() return HeadSwap.currentAnim() end
 -- The heads in the window are NPC heads: with the player's own head in use they play the NPC version of the animation
 -- chosen (the choice itself is kept, so closing the window without picking a head leaves the player's version).
 HeadGallery.animFor = function() return HeadSwap.animForHead(HeadSwap.currentAnim(), false) end
-Variants.animForPlayer = function() return HeadSwap.ownHeadAnim(true) end
+Variants.animForPlayer = function() return HeadSwap.playerHeadAnim(true) end
 -- The head size setting applies to the heads in the variants window and the debug window too.
 Variants.scaleFor = function() return HeadSwap.scale end
 HeadGallery.scaleFor = Variants.scaleFor
@@ -291,9 +291,9 @@ openVariants = function()
     -- Works with a single variant too, as a preview of the head.
     -- With the player's own head in use, the window shows just that head.
     local group = Settings.npcID and Npcs.groupOf(Settings.npcID) or nil
-    local own = Settings.npcID == nil
+    local player = Settings.npcID == nil
     local note = ""
-    if group == nil and not own then
+    if group == nil and not player then
         note = "Choose an NPC first."
     else
         -- The top plugin layer, above the game's own interfaces (as read_later's windows over its dialogue).
@@ -302,7 +302,7 @@ openVariants = function()
         end)
         if ok and parent ~= nil then
             local function picked(npcID) chooseNpc(npcID ~= Variants.PLAYER and npcID or nil) end
-            if own then
+            if player then
                 Variants.open(PrettyUI, parent, "My head", { Variants.PLAYER }, Variants.PLAYER, picked)
             else
                 -- Variants with no head, and ones that look like another, are left out.
