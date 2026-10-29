@@ -504,6 +504,7 @@ local ANIMATION_HEAD = 0
 local ANIMATION_ENTRIES_PER_LINE = 12
 local AnimationScan = require("src/debug/animation_scan")
 local Whitelist = require("src/data/animation_whitelist")
+local Animations = require("src/data/animations")
 local animationBrowserWanted = false
 
 local TINT_LISTED = { 0.10, 0.28, 0.12, 1 }     -- on the whitelist, listed in the dropdown
@@ -515,7 +516,7 @@ local function showAnimationBrowser()
     end)
     if not (ok and parent ~= nil) then return false end
     local ids, names, listed, duplicates = {}, {}, {}, {}
-    for _, animID in ipairs(Whitelist.ids or {}) do listed[animID] = true end
+    for _, entry in ipairs(Animations.npc) do listed[entry.id] = true end
     for _, animID in ipairs(Whitelist.duplicates or {}) do duplicates[animID] = true end
     for _, anim in ipairs(AnimationScan.list) do
         ids[#ids + 1] = anim.id

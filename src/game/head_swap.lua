@@ -4,6 +4,7 @@
 -- NPC head with Model:SetModel. Checked every frame: the game sets the player's head again whenever it
 -- fills or lays out a box, so it would otherwise flash up or come back.
 
+local Anims = require("src/game/anims")
 local PlayerAnims = require("src/data/player_head_animations")
 
 local HeadSwap = {}
@@ -86,10 +87,7 @@ end
 -- one as its twin. Where there is none, evil laugh (of the kind the head plays).
 function HeadSwap.animForHead(animID, ownHead)
     if animID == nil then return nil end
-    local isPlayers = false
-    for _, actorID in ipairs(PlayerAnims.actors) do
-        if actorID == animID then isPlayers = true break end
-    end
+    local isPlayers = Anims.isOwn(animID)
     if ownHead then
         if isPlayers then return animID end
         return PlayerAnims.twin[animID] or PlayerAnims.fallback

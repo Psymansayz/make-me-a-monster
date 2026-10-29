@@ -1,14 +1,7 @@
 -- The only animations the plugin lists: chat and head animations that work on a chat head. Read by
 -- src/game/anims.lua, which looks up just these ids (the animation configs are not scanned).
 return {
-    -- Listed in the animation dropdown.
-    ids = {
-        2601, 2602, 9742, 9746, 9750, 9757, 9761, 9765, 9769, 9773, 9777, 9781,
-        9785, 9789, 9793, 9802, 9803, 9804, 9807, 9811, 9827, 9831, 9835, 9836,
-        9840, 9841, 9842, 9843, 9847, 9851, 11009, 12287, 12554, 12648, 12649, 12650,
-        13656, 29828, 29832, 29836,
-    },
-    -- The same animation as one in `ids` (a longer take, a loop...), or one kept out of the dropdown for now: never listed, so kept apart.
+    -- The same animation as one in the animations listed (src/data/animations.lua) (a longer take, a loop...), or one kept out of the dropdown for now: never listed, so kept apart.
     duplicates = {
         9743, 9744, 9745, 9747, 9748, 9749, 9751, 9752, 9753, 9758, 9759, 9760,
         9762, 9763, 9764, 9766, 9767, 9768, 9770, 9771, 9772, 9774, 9775, 9776,
