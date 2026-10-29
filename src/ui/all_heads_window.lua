@@ -43,7 +43,7 @@ local function toColour(colourValues) return Vector4.new(colourValues[1], colour
 
 -- The head size setting: how many times larger than normal the heads are drawn (1: normal).
 local function currentHeadScale()
-    return Settings.headScale
+    return Settings.headScaleMultiplier()
 end
 
 local function destroyCells()

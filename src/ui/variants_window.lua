@@ -93,7 +93,7 @@ end
 
 -- The head size setting: how many times larger than normal the heads are drawn (1: normal).
 local function currentHeadScale()
-    return Settings.headScale
+    return Settings.headScaleMultiplier()
 end
 
 -- A cell's parts put in their places (and sized) for the geometry g.

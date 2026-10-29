@@ -287,16 +287,16 @@ local function buildPage(pluginLayer)
     pageView:AddSimpleButton("Browse all heads", function() openAllHeadsWindow() end)
     pageView:AddSimpleButton("Use my own head", function() chooseNpc(nil) end)
     pageControls.noticeText = pageView:AddText("")
-    pageControls.headSizeText = pageView:AddText("Head size: " .. math.floor(Settings.headScale * 100 + 0.5) .. "%")
+    pageControls.headSizeText = pageView:AddText("Head size: " .. Settings.headSizePercent() .. "%")
     pageView:AddSlider({
         min = 100,
         max = 300,
         step = 5,
-        value = math.floor(Settings.headScale * 100 + 0.5),
+        value = Settings.headSizePercent(),
         onChange = function(_, sliderValue)
             local percent = math.max(100, math.min(300, math.floor(sliderValue / 5 + 0.5) * 5))
-            Settings.setHeadScale(percent / 100)
-            HeadSwap.refreshHeadScale() -- (the heads shown now follow)
+            Settings.setHeadSizePercent(percent)
+            HeadSwap.refreshHeadViewDistance() -- (the heads shown now follow)
             pcall(function() pageControls.headSizeText.content = "Head size: " .. percent .. "%" end)
         end,
     })
