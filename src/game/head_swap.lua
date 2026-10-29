@@ -142,6 +142,17 @@ local frameNumber = 0
 local lastSeenViewDistance = {}
 local function logLine(text) print("[make_me_a_monster] VIEWDIST frame " .. frameNumber .. " " .. text) end
 
+-- EXPERIMENT (dev only): the head size is written once, when an NPC's head is put in a box, from the view distance the
+-- game uses for the player's line (2150 in every log seen), instead of being checked every frame.
+local GAME_VIEW_DISTANCE = 2150
+
+local function setHeadScaleOnce(componentKey, component)
+    if Settings.headScale <= 1 then return end
+    local scaled = math.max(1, math.floor(GAME_VIEW_DISTANCE / Settings.headScale + 0.5))
+    component.viewDistance = scaled
+    logLine(componentKey .. " view distance set once to " .. scaled)
+end
+
 -- The head drawn Settings.headScale times larger by moving the camera closer: the view distance is the game's divided
 -- by the scale. The game sets the view distance itself when it fills a box, so a value other than the one written
 -- is the game's, and becomes the new game value. (Only as large as the box's own space: more of the head than that
@@ -196,6 +207,7 @@ local function swapComponentHead(component, npcID, componentKey)
             -- "Use my own head": the player's head again, with the animation the game had set on it.
             swappedHeads[componentKey] = nil
             component:SetModel(ui.ModelType.PLAYER_HEAD, -1)
+            component.viewDistance = GAME_VIEW_DISTANCE
             if swappedHead.gameAnimation ~= nil then component.animID = swappedHead.gameAnimation end
             modelType = tonumber(component.modelType)
         end
@@ -225,12 +237,11 @@ local function swapComponentHead(component, npcID, componentKey)
         swappedHead.npcID = npcID
         component:SetModel(ui.ModelType.NPC_HEAD, npcID)
         HeadSwap.applyNpcHeadAnimation(component)
-        applyHeadScale(componentKey, component)
+        setHeadScaleOnce(componentKey, component)
         return
     end
     if modelType == NPC_HEAD_MODEL_TYPE and component.modelID1 == npcID then
         HeadSwap.applyNpcHeadAnimation(component) -- (already ours: the animation kept up)
-        applyHeadScale(componentKey, component)
         return
     end
     if modelType ~= PLAYER_HEAD_MODEL_TYPE then return end -- an NPC's own head stays
@@ -243,7 +254,7 @@ local function swapComponentHead(component, npcID, componentKey)
     logLine(componentKey .. " player head swapped for NPC " .. npcID .. " (view distance " .. tostring(component.viewDistance) .. ")")
     component:SetModel(ui.ModelType.NPC_HEAD, npcID)
     HeadSwap.applyNpcHeadAnimation(component)
-    applyHeadScale(componentKey, component)
+    setHeadScaleOnce(componentKey, component)
 end
 
 -- Every frame (a Draw event: the game sets the player's head again whenever it fills or lays out a box). Does nothing
