@@ -74,9 +74,23 @@ local loggedVisible = {}
 local function logComponentOnce(componentKey, component)
     if loggedVisible[componentKey] then return end
     loggedVisible[componentKey] = true
-    print(("[make_me_a_monster] COMPONENTS %s visible: modelType %s modelID1 %s viewDistance %s animID %s"):format(
+    print(("[make_me_a_monster] COMPONENTS %s visible: modelType %s modelID1 %s viewDistance %s animID %s at x %s y %s size %sx%s"):format(
         componentKey, tostring(component.modelType), tostring(component.modelID1), tostring(component.viewDistance),
-        tostring(component.animID)))
+        tostring(component.animID), tostring(component.x), tostring(component.y), tostring(component.width), tostring(component.height)))
+end
+
+-- Three frames after a head is swapped, where every component of that interface is.
+local tickCount = 0
+local positionsDue = {} -- interface -> the tick to log them at
+local function logPositions(interface, components)
+    for position, staticID in ipairs(components.ids) do
+        local fetched, component = pcall(ui.Interfaces.GetComponent, ui.Interfaces, interface, staticID)
+        if fetched and component ~= nil and component.visibleGlobal == true then
+            print(("[make_me_a_monster] COMPONENTS %s AFTER SWAP: modelType %s modelID1 %s at x %s y %s size %sx%s"):format(
+                components.keys[position], tostring(component.modelType), tostring(component.modelID1), tostring(component.x),
+                tostring(component.y), tostring(component.width), tostring(component.height)))
+        end
+    end
 end
 
 -- Whether an interface is open now. (Checked first each frame, so a closed box costs nothing more.)
@@ -227,6 +241,7 @@ local function swapComponentHead(component, npcID, componentKey)
         HeadSwap.npcVersionOfGameAnimation = npcVersionOfPlayerAnimation[gameAnimationOfLine]
     end
     swappedHeads[componentKey] = { npcID = npcID, gameAnimation = gameAnimationOfLine }
+    positionsDue[tonumber(componentKey:match("^(%d+)"))] = tickCount + 3
     component:SetModel(ui.ModelType.NPC_HEAD, npcID)
     HeadSwap.applyNpcHeadAnimation(component)
     writeHeadViewDistance(component)
@@ -268,10 +283,15 @@ end
 -- until a dialogue box is open, and leaves out what isn't needed (the NPC's own animation is only used with an NPC head).
 function HeadSwap.tick()
     -- TEMPORARY LOG (dev only): runs whatever the settings are, so the components are logged even when the rest is idle.
+    tickCount = tickCount + 1
     for _, interface in ipairs({ 1191, 1187, 1184 }) do
         if isInterfaceOpen(interface) then
             local logged = modelComponents(interface)
             if logged ~= nil then
+                if positionsDue[interface] ~= nil and tickCount >= positionsDue[interface] then
+                    positionsDue[interface] = nil
+                    logPositions(interface, logged)
+                end
                 for position, staticID in ipairs(logged.ids) do
                     local fetched, component = pcall(ui.Interfaces.GetComponent, ui.Interfaces, interface, staticID)
                     if fetched and component ~= nil and component.visibleGlobal == true then
