@@ -1,34 +1,35 @@
--- The animations the plugin lists: those in src/data/animation_whitelist.lua (for NPC heads) and
--- src/data/player_head_animations.lua (for the player's own head), each with the label src/data/animation_labels.lua
--- gives it. Nothing is looked up in the game and no animation name is read.
+-- The animations the plugin lists, from src/data/animations.lua (already in the dropdown's order). Nothing is looked
+-- up in the game and no animation name is read.
 
-local Whitelist = require("src/data/animation_whitelist")
-local PlayerAnims = require("src/data/player_head_animations")
-local Labels = require("src/data/animation_labels")
+local Data = require("src/data/animations")
 
 local Anims = {}
 
+local byID = {} -- id -> the entry { id, label } and whether it is one for the player's own head
+for _, own in ipairs({ false, true }) do
+    for _, entry in ipairs(own and Data.own or Data.npc) do byID[entry.id] = { entry = entry, own = own } end
+end
+
 -- Whether the animation with this id is listed.
 function Anims.find(animID)
-    return Labels[animID] ~= nil
+    return byID[animID] ~= nil
 end
 
 -- The label of the animation with this id, or nil if it isn't listed.
 function Anims.displayName(animID)
-    return Labels[animID]
+    local found = byID[animID]
+    return found and found.entry.label or nil
 end
 
--- The animations for the player's head if `own`, else those for NPC heads: { id, label }, in label order.
+-- Whether the animation with this id is one for the player's own head.
+function Anims.isOwn(animID)
+    local found = byID[animID]
+    return found ~= nil and found.own
+end
+
+-- The animations for the player's own head if `own`, else those for NPC heads: { id, label }, in the order shown.
 function Anims.options(own)
-    local found = {}
-    for _, animID in ipairs(own and PlayerAnims.actors or Whitelist.ids) do
-        found[#found + 1] = { id = animID, label = Labels[animID] }
-    end
-    table.sort(found, function(a, b)
-        if a.label ~= b.label then return a.label < b.label end
-        return a.id < b.id
-    end)
-    return found
+    return own and Data.own or Data.npc
 end
 
 return Anims
