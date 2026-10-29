@@ -100,16 +100,51 @@ function NpcDirectory.loadListedHeads(listedHeadsData)
     NpcDirectory.isLoaded = true
 end
 
--- The text a search looks in for a group: its names (as they are and with plain letters) and ids.
+-- The text a search looks in for one name of a group: the name (as it is and with plain letters) and its ids.
+local function searchOfMember(member)
+    if member.search == nil then
+        member.search = NpcDirectory.searchableText(member.name) .. " " .. table.concat(member.ids, " ")
+    end
+    return member.search
+end
+
+-- The text a search looks in for a group: all its names and ids.
 local function searchOf(npcGroup)
     if npcGroup.search == nil then
         local searchParts = {}
-        for _, member in ipairs(npcGroup.members) do
-            searchParts[#searchParts + 1] = NpcDirectory.searchableText(member.name) .. " " .. table.concat(member.ids, " ")
-        end
+        for _, member in ipairs(npcGroup.members) do searchParts[#searchParts + 1] = searchOfMember(member) end
         npcGroup.search = table.concat(searchParts, " ")
     end
     return npcGroup.search
+end
+
+-- The lower case words of a query.
+local function wordsOfQuery(query)
+    local queryWords = {}
+    for queryWord in NpcDirectory.lowerCaseAscii(tostring(query or "")):gmatch("%S+") do queryWords[#queryWords + 1] = queryWord end
+    return queryWords
+end
+
+local function containsEveryWord(text, queryWords)
+    for _, queryWord in ipairs(queryWords) do
+        if not text:find(queryWord, 1, true) then return false end
+    end
+    return true
+end
+
+-- The name of the group (a member) that matched the query, for the dropdown to show: of the names whose own text and ids hold
+-- every word of the query, the shortest (the most general: "Goblin" before "Goblin guard"), the first if equal. Nil if the
+-- query is blank or its words are spread over different names.
+function NpcDirectory.memberMatching(npcGroup, query)
+    local queryWords = wordsOfQuery(query)
+    if #queryWords == 0 then return nil end
+    local best = nil
+    for _, member in ipairs(npcGroup.members) do
+        if containsEveryWord(searchOfMember(member), queryWords) and (best == nil or #member.name < #best.name) then
+            best = member
+        end
+    end
+    return best
 end
 
 -- The name of the NPC with this id (as listed), or nil.
@@ -129,20 +164,20 @@ function NpcDirectory.labelOfGroup(npcGroup, variantCount)
     return variantCount > 1 and (npcGroup.name .. " (" .. variantCount .. " variants)") or npcGroup.name
 end
 
+-- The same for one name of a group (a member): its name, and how many NPCs have it if more than one.
+function NpcDirectory.labelOfMember(member)
+    return #member.ids > 1 and (member.name .. " (" .. #member.ids .. " variants)") or member.name
+end
+
 -- Up to `limit` groups whose name or ids contain every word of the query (all of them, in order, if the
 -- query is blank); letters beyond ASCII match themselves and their plain letters, ignoring case.
 function NpcDirectory.searchGroups(query, maxResults)
-    local queryWords = {}
-    for queryWord in NpcDirectory.lowerCaseAscii(tostring(query or "")):gmatch("%S+") do queryWords[#queryWords + 1] = queryWord end
+    local queryWords = wordsOfQuery(query)
     local matchingGroups = {}
     for _, npcGroup in ipairs(NpcDirectory.groups) do
-        local matchesEveryWord = true
-        for _, queryWord in ipairs(queryWords) do
-            -- (the group's search text holds the name as it is and with its letters beyond ASCII made plain: a
-            -- plain word finds either, one with such a letter only the name that has it)
-            if not searchOf(npcGroup):find(queryWord, 1, true) then matchesEveryWord = false break end
-        end
-        if matchesEveryWord then
+        -- (the group's search text holds the name as it is and with its letters beyond ASCII made plain: a plain word
+        -- finds either, one with such a letter only the name that has it)
+        if containsEveryWord(searchOf(npcGroup), queryWords) then
             matchingGroups[#matchingGroups + 1] = npcGroup
             if #matchingGroups >= maxResults then break end
         end
