@@ -226,17 +226,34 @@ local handledBoxes = {} -- interface -> true while it is open and has been handl
 -- before the game filled it): the single boxes get CHAT_V3_UPDATE_INTERFACE (8180) and PAGEPOS (101), the pair box only
 -- PAGEPOS. After either, the open boxes are looked at again for a few frames: heads the game has set again are swapped
 -- again, and heads that are already ours are left alone.
+-- The variables are listened to only while a box with the player's head (the player's line or the pair) has been handled.
 local DIALOGUE_UPDATE_VARIABLE_IDS = { [8180] = true, [101] = true }
 local FRAMES_TO_RECHECK = 5
 local framesToRecheck = 0
+local VARIABLE_SUBSCRIPTION = "make_me_a_monster_dialogue_update"
+local listeningForUpdates = false
 
-Event.VarTransmit.Subscribe("make_me_a_monster_dialogue_update", function(event)
+local function onVariableTransmitted(event)
     if DIALOGUE_UPDATE_VARIABLE_IDS[event.var.id] then framesToRecheck = FRAMES_TO_RECHECK end
-end)
+end
+
+-- Listens while one of the boxes that can hold the player's head is handled, and stops when neither is.
+local function updateVariableSubscription()
+    local wanted = handledBoxes[PLAYER_LINE_INTERFACE] or handledBoxes[PAIR_INTERFACE]
+    if wanted and not listeningForUpdates then
+        Event.VarTransmit.Subscribe(VARIABLE_SUBSCRIPTION, onVariableTransmitted)
+        listeningForUpdates = true
+    elseif not wanted and listeningForUpdates then
+        Event.VarTransmit.Unsubscribe(VARIABLE_SUBSCRIPTION)
+        listeningForUpdates = false
+        framesToRecheck = 0
+    end
+end
 
 -- For the plugin shutting down.
 function HeadSwap.stop()
-    Event.VarTransmit.Unsubscribe("make_me_a_monster_dialogue_update")
+    handledBoxes = {}
+    updateVariableSubscription()
 end
 
 -- The head components of a box that has opened, swapped once.
@@ -255,6 +272,7 @@ end
 -- What a closed box leaves behind is let go (the game fills it again when it opens).
 local function forgetBox(interface)
     handledBoxes[interface] = nil
+    updateVariableSubscription()
     if interface == PLAYER_LINE_INTERFACE then
         writtenAnimation["1191:8"], gameAnimation["1191:8"], swappedHeads["1191:8"] = nil, nil, nil
     elseif interface == PAIR_INTERFACE then
@@ -276,6 +294,7 @@ local function watchBox(interface)
     if isInterfaceOpen(interface) then
         if not handledBoxes[interface] then
             handledBoxes[interface] = true
+            updateVariableSubscription()
             pcall(handleBox, interface)
         end
     elseif handledBoxes[interface] then
@@ -299,6 +318,7 @@ end
 -- Logout: the boxes are gone.
 function HeadSwap.reset()
     writtenAnimation, gameAnimation, swappedHeads, handledBoxes = {}, {}, {}, {}
+    updateVariableSubscription()
 end
 
 return HeadSwap
