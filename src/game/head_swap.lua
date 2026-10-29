@@ -4,7 +4,7 @@
 -- NPC head with Model:SetModel. Checked every frame: the game sets the player's head again whenever it
 -- fills or lays out a box, so it would otherwise flash up or come back.
 
-local Anims = require("src/game/anims")
+local ListedAnimations = require("src/game/listed_animations")
 local Settings = require("src/data/settings")
 local AnimationData = require("src/data/animations")
 
@@ -15,9 +15,9 @@ HeadSwap.npcVersionOfGameAnimation = nil
 
 -- Interfaces with a player head: the player's line (CHAT_V2_RIGHT) and two heads at once (CHAT_V2_PAIR).
 -- The ids are as seen in game; id.Interface is preferred when it has them.
-local function interfaceID(name, fallback)
-    local ok, value = pcall(function() return id.Interface[name] end)
-    return ok and type(value) == "number" and value or fallback
+local function interfaceID(interfaceName, defaultID)
+    local succeeded, detectedID = pcall(function() return id.Interface[interfaceName] end)
+    return succeeded and type(detectedID) == "number" and detectedID or defaultID
 end
 local PLAYER_HEAD_INTERFACES = {
     interfaceID("CHAT_V2_RIGHT", 1191),
@@ -52,11 +52,11 @@ local function modelComponentIDs(interface)
     componentIDs = {}
     local MODEL = ui.ComponentType.MODEL
     for staticID = 0, MAX_COMPONENT_SCAN_ID do
-        local ok, isModel = pcall(function()
+        local succeeded, isModel = pcall(function()
             local component = ui.Interfaces:GetComponent(interface, staticID)
             return component ~= nil and component.type == MODEL
         end)
-        if ok and isModel then componentIDs[#componentIDs + 1] = staticID end
+        if succeeded and isModel then componentIDs[#componentIDs + 1] = staticID end
     end
     modelComponentIDsOfInterface[interface] = componentIDs
     return componentIDs
@@ -64,8 +64,8 @@ end
 
 -- Whether an interface is open now (a cheap check, so a closed box costs nothing each frame).
 local function isInterfaceOpen(interface)
-    local ok, isOpen = pcall(function() return ui.Interfaces:GetInterface(interface) ~= nil end)
-    return ok and isOpen
+    local succeeded, isOpen = pcall(function() return ui.Interfaces:GetInterface(interface) ~= nil end)
+    return succeeded and isOpen
 end
 
 -- The animation an NPC's head should play (never a player's animation: they don't play on an NPC's head): the
@@ -73,16 +73,16 @@ end
 -- line (HeadSwap.npcVersionOfGameAnimation), and only if that has none, the one last seen on a real NPC's head.
 -- Also what the heads in the windows play.
 function HeadSwap.npcHeadAnimation()
-    local chosenAnimation = Settings.animOverride
+    local chosenAnimation = Settings.chosenAnimationID
     if chosenAnimation ~= nil then return HeadSwap.animationForHead(chosenAnimation, false) end
-    return HeadSwap.npcVersionOfGameAnimation or Settings.animID
+    return HeadSwap.npcVersionOfGameAnimation or Settings.lastSeenNpcAnimationID
 end
 
 -- The animation the player's own head plays for the animation chosen (which may be one for an NPC's head): its
 -- HUMAN_ACTOR twin from src/data/animations.lua, else evil laugh. With none chosen:
 -- the neutral one if asked for (withNeutral, for a head shown outside dialogue), else nil.
 function HeadSwap.playerHeadAnimation(withNeutral)
-    local chosenAnimation = Settings.animOverride
+    local chosenAnimation = Settings.chosenAnimationID
     if chosenAnimation == nil then return withNeutral and AnimationData.neutral or nil end
     -- (never an NPC animation: it is changed to the player's version)
     return HeadSwap.animationForHead(chosenAnimation, true)
@@ -93,7 +93,7 @@ end
 -- one as its twin. Where there is none, evil laugh (of the kind the head plays).
 function HeadSwap.animationForHead(animationID, forPlayerHead)
     if animationID == nil then return nil end
-    local isPlayerAnimation = Anims.isPlayerAnimation(animationID)
+    local isPlayerAnimation = ListedAnimations.isPlayerAnimation(animationID)
     if forPlayerHead then
         if isPlayerAnimation then return animationID end
         return AnimationData.twin[animationID] or AnimationData.fallback
@@ -116,8 +116,8 @@ local function learnNpcSpeechAnimation()
         local component = ui.Interfaces:GetComponent(NPC_SPEECH_INTERFACE, staticID)
         if component.visibleGlobal == true and tonumber(component.modelType) == NPC_HEAD_MODEL_TYPE then
             local animationID = tonumber(component.animID)
-            if animationID ~= nil and animationID >= 0 and animationID ~= Settings.animID then
-                Settings.setAnim(animationID)
+            if animationID ~= nil and animationID >= 0 and animationID ~= Settings.lastSeenNpcAnimationID then
+                Settings.setLastSeenNpcAnimation(animationID)
             end
         end
     end
@@ -228,17 +228,17 @@ end
 
 -- Every frame.
 function HeadSwap.tick()
-    local npcID = Settings.npcID
+    local npcID = Settings.chosenNpcID
     if npcID ~= nil then pcall(learnNpcSpeechAnimation) end -- (the NPC's own animation is only used with an NPC's head)
     -- (nothing to do with no NPC, no animation chosen, normal size and nothing left to put back)
-    if npcID == nil and Settings.animOverride == nil and Settings.headScale <= 1 and next(scaledViewDistance) == nil
+    if npcID == nil and Settings.chosenAnimationID == nil and Settings.headScale <= 1 and next(scaledViewDistance) == nil
         and next(writtenAnimation) == nil and next(swappedHeads) == nil then
         return
     end
     for _, interface in ipairs(PLAYER_HEAD_INTERFACES) do
-        local ok, componentIDs = false, nil
-        if isInterfaceOpen(interface) then ok, componentIDs = pcall(modelComponentIDs, interface) end
-        if ok and componentIDs ~= nil then
+        local succeeded, componentIDs = false, nil
+        if isInterfaceOpen(interface) then succeeded, componentIDs = pcall(modelComponentIDs, interface) end
+        if succeeded and componentIDs ~= nil then
             for _, staticID in ipairs(componentIDs) do
                 pcall(function()
                     swapComponentHead(ui.Interfaces:GetComponent(interface, staticID), npcID, interface .. ":" .. staticID)

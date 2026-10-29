@@ -1,5 +1,5 @@
 -- The only animations the plugin lists: chat and head animations that work on a chat head. Read by
--- src/game/anims.lua, which looks up just these ids (the animation configs are not scanned).
+-- src/game/listed_animations.lua, which looks up just these ids (the animation configs are not scanned).
 return {
     -- The same animation as one in the animations listed (src/data/animations.lua) (a longer take, a loop...), or one kept out of the dropdown for now: never listed, so kept apart.
     duplicates = {

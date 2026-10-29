@@ -30,10 +30,10 @@ local function describe(value, depth)
     if kind == "number" or kind == "string" or kind == "boolean" then return tostring(value) end
     if depth > 3 then return "?" end
     local items = {}
-    local ok = pcall(function()
+    local succeeded = pcall(function()
         for key, item in ipairs(value) do items[#items + 1] = { key, item } end
     end)
-    if not ok or #items == 0 then
+    if not succeeded or #items == 0 then
         pcall(function()
             for key, item in pairs(value) do items[#items + 1] = { key, item } end
         end)
@@ -58,7 +58,7 @@ local read = {}  -- npc id -> true once looked at
 local function signature(npcID)
     if read[npcID] then return cache[npcID] end
     read[npcID] = true
-    local ok, result = pcall(function()
+    local succeeded, result = pcall(function()
         local custom = ui.NPCCustomisation.new(npcID, false)
         if custom == nil then return nil end
         if custom.isPlayerClone == true then return "player clone" end
@@ -67,7 +67,7 @@ local function signature(npcID)
             describe(custom.modelList), describe(custom.modelRecolourList), describe(custom.modelRematerialList),
         }, "|")
     end)
-    if ok then cache[npcID] = result end
+    if succeeded then cache[npcID] = result end
     return cache[npcID]
 end
 

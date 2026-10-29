@@ -1,5 +1,5 @@
 -- Debug only: reads every animation in the game (config.Seq), a few hundred ids a frame, for the debug window that
--- plays them on Hans. (The plugin itself looks up only the whitelisted animations, see src/game/anims.lua.)
+-- plays them on Hans. (The plugin itself looks up only the whitelisted animations, see src/game/listed_animations.lua.)
 --
 -- AnimationScan.step(): call every frame until AnimationScan.done. AnimationScan.list = { { id, name }... } in id order.
 
@@ -22,8 +22,8 @@ function AnimationScan.step()
     for _ = 1, PER_FRAME do
         local animID = AnimationScan.scanned
         AnimationScan.scanned = animID + 1
-        local ok, name = pcall(function() return config.Seq.FromID(animID).configName end)
-        if ok and type(name) == "string" then
+        local succeeded, name = pcall(function() return config.Seq.FromID(animID).configName end)
+        if succeeded and type(name) == "string" then
             misses = 0
             if name ~= "" then AnimationScan.list[#AnimationScan.list + 1] = { id = animID, name = name } end
         else
