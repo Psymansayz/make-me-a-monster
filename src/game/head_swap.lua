@@ -137,6 +137,11 @@ local writtenAnimation, gameAnimation = {}, {}
 -- player's head }, to change the head when another NPC is chosen and to put the player's head back.
 local swappedHeads = {}
 
+-- TEMPORARY LOG (dev only): when the game changes a head component's view distance, and when heads are swapped.
+local frameNumber = 0
+local lastSeenViewDistance = {}
+local function logLine(text) print("[make_me_a_monster] VIEWDIST frame " .. frameNumber .. " " .. text) end
+
 -- The head drawn Settings.headScale times larger by moving the camera closer: the view distance is the game's divided
 -- by the scale. The game sets the view distance itself when it fills a box, so a value other than the one written
 -- is the game's, and becomes the new game value. (Only as large as the box's own space: more of the head than that
@@ -147,6 +152,13 @@ local function applyHeadScale(componentKey, component)
     local currentViewDistance = component.viewDistance
     if type(currentViewDistance) ~= "number" then return end
     local record = scaledViewDistance[componentKey]
+    if currentViewDistance ~= lastSeenViewDistance[componentKey] then
+        if not (record ~= nil and currentViewDistance == record.written) then
+            logLine(("%s game view distance %s (we had written %s, scale %s)"):format(componentKey,
+                tostring(currentViewDistance), tostring(record and record.written), tostring(Settings.headScale)))
+        end
+        lastSeenViewDistance[componentKey] = currentViewDistance
+    end
     if Settings.headScale <= 1 then
         if record ~= nil and currentViewDistance == record.written then component.viewDistance = record.game end
         scaledViewDistance[componentKey] = nil
@@ -165,6 +177,8 @@ end
 -- player's own head stays, playing the animation the player picked. Either way it is drawn at the size set.
 local function swapComponentHead(component, npcID, componentKey)
     if component.visibleGlobal ~= true then
+        if swappedHeads[componentKey] ~= nil or lastSeenViewDistance[componentKey] ~= nil then logLine(componentKey .. " hidden") end
+        lastSeenViewDistance[componentKey] = nil
         scaledViewDistance[componentKey], writtenAnimation[componentKey] = nil, nil
         gameAnimation[componentKey], swappedHeads[componentKey] = nil, nil
         return
@@ -226,6 +240,7 @@ local function swapComponentHead(component, npcID, componentKey)
         HeadSwap.npcVersionOfGameAnimation = npcVersionOfPlayerAnimation[gameAnimationOfLine]
     end
     swappedHeads[componentKey] = { npcID = npcID, gameAnimation = gameAnimationOfLine }
+    logLine(componentKey .. " player head swapped for NPC " .. npcID .. " (view distance " .. tostring(component.viewDistance) .. ")")
     component:SetModel(ui.ModelType.NPC_HEAD, npcID)
     HeadSwap.applyNpcHeadAnimation(component)
     applyHeadScale(componentKey, component)
@@ -234,6 +249,7 @@ end
 -- Every frame (a Draw event: the game sets the player's head again whenever it fills or lays out a box). Does nothing
 -- until a dialogue box is open, and leaves out what isn't needed (the NPC's own animation is only used with an NPC head).
 function HeadSwap.tick()
+    frameNumber = frameNumber + 1
     local npcID = Settings.chosenNpcID
     if npcID ~= nil and isInterfaceOpen(NPC_SPEECH_INTERFACE) then pcall(learnNpcSpeechAnimation) end
     -- (nothing to do with no NPC, no animation chosen, normal size and nothing left to put back)
