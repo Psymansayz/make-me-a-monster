@@ -267,6 +267,22 @@ end
 -- Every frame (a Draw event: the game sets the player's head again whenever it fills or lays out a box). Does nothing
 -- until a dialogue box is open, and leaves out what isn't needed (the NPC's own animation is only used with an NPC head).
 function HeadSwap.tick()
+    -- TEMPORARY LOG (dev only): runs whatever the settings are, so the components are logged even when the rest is idle.
+    for _, interface in ipairs({ 1191, 1187, 1184 }) do
+        if isInterfaceOpen(interface) then
+            local logged = modelComponents(interface)
+            if logged ~= nil then
+                for position, staticID in ipairs(logged.ids) do
+                    local fetched, component = pcall(ui.Interfaces.GetComponent, ui.Interfaces, interface, staticID)
+                    if fetched and component ~= nil and component.visibleGlobal == true then
+                        logComponentOnce(logged.keys[position], component)
+                    elseif fetched then
+                        loggedVisible[logged.keys[position]] = nil
+                    end
+                end
+            end
+        end
+    end
     local npcID = Settings.chosenNpcID
     if npcID ~= nil and isInterfaceOpen(NPC_SPEECH_INTERFACE) then pcall(learnNpcSpeechAnimation) end
     -- (nothing to do with no NPC, no animation chosen and normal size)
