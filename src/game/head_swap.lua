@@ -1,8 +1,8 @@
 -- Replaces the player's chat head in the game's dialogue boxes with an NPC's head.
 --
 -- The boxes' own head components are ui.Models, so a player head (ModelType PLAYER_HEAD) is turned into an
--- NPC head with Model:SetModel. Checked every frame: the game sets the player's head again whenever it
--- fills or lays out a box, so it would otherwise flash up or come back.
+-- NPC head with Model:SetModel. A box is handled once, when it opens, and again when the player changes the head,
+-- the animation or the size: the game does not undo the changes while a box stays open.
 
 local Animations = require("src/game/animations")
 local Settings = require("src/data/settings")
@@ -219,8 +219,6 @@ function HeadSwap.refreshHeadViewDistance()
     forEachOpenHeadComponent(scaleHeadVisit)
 end
 
--- EXPERIMENT (dev only): a box is handled once, when it opens (and when the player changes the head, the animation or the
--- size), instead of every frame. Whether the game clears the changes while a box stays open is what is being tried.
 local handledBoxes = {} -- interface -> true while it is open and has been handled
 
 -- The head components of a box that has opened, swapped once.
@@ -248,44 +246,34 @@ local function forgetBox(interface)
     end
 end
 
--- The player changed the head or the animation: the boxes open now follow.
-function HeadSwap.refreshOpenBoxes()
+-- The player changed the head, the animation or the size: the boxes open now follow.
+function HeadSwap.refreshOpenDialogues()
     npcIDToShow = Settings.chosenNpcID
     forEachOpenHeadComponent(swapHeadVisit)
     if npcIDToShow ~= nil and isInterfaceOpen(NPC_SPEECH_INTERFACE) then pcall(learnNpcSpeechAnimation) end
 end
 
--- Every frame (a Draw event): looks for a box that has just opened and handles it once.
-function HeadSwap.tick()
-    if isInterfaceOpen(PLAYER_LINE_INTERFACE) then
-        if not handledBoxes[PLAYER_LINE_INTERFACE] then
-            handledBoxes[PLAYER_LINE_INTERFACE] = true
-            pcall(handleBox, PLAYER_LINE_INTERFACE)
+-- A box that has just opened is handled once; one that has closed is forgotten.
+local function watchBox(interface)
+    if isInterfaceOpen(interface) then
+        if not handledBoxes[interface] then
+            handledBoxes[interface] = true
+            pcall(handleBox, interface)
         end
-    elseif handledBoxes[PLAYER_LINE_INTERFACE] then
-        forgetBox(PLAYER_LINE_INTERFACE)
-    end
-    if isInterfaceOpen(PAIR_INTERFACE) then
-        if not handledBoxes[PAIR_INTERFACE] then
-            handledBoxes[PAIR_INTERFACE] = true
-            pcall(handleBox, PAIR_INTERFACE)
-        end
-    elseif handledBoxes[PAIR_INTERFACE] then
-        forgetBox(PAIR_INTERFACE)
-    end
-    if Settings.chosenNpcID ~= nil then
-        if isInterfaceOpen(NPC_SPEECH_INTERFACE) then
-            if not handledBoxes[NPC_SPEECH_INTERFACE] then
-                handledBoxes[NPC_SPEECH_INTERFACE] = true
-                pcall(handleBox, NPC_SPEECH_INTERFACE)
-            end
-        else
-            handledBoxes[NPC_SPEECH_INTERFACE] = nil
-        end
+    elseif handledBoxes[interface] then
+        forgetBox(interface)
     end
 end
 
--- Logout: the boxes are gone, so what was found about them is looked up again.
+-- Every frame (a Draw event): only looks for a box that has just opened or closed, three lookups. (The NPC's own
+-- animation is only used with an NPC head, so that box is watched only then.)
+function HeadSwap.tick()
+    watchBox(PLAYER_LINE_INTERFACE)
+    watchBox(PAIR_INTERFACE)
+    if Settings.chosenNpcID ~= nil then watchBox(NPC_SPEECH_INTERFACE) end
+end
+
+-- Logout: the boxes are gone.
 function HeadSwap.reset()
     writtenAnimation, gameAnimation, swappedHeads, handledBoxes = {}, {}, {}, {}
 end
