@@ -212,7 +212,14 @@ local function refreshNpcDropdown()
     isRefreshingNpcDropdown = true
     pcall(function() pluginPage.npcDropdown:SetEntries(entries, selected) end)
     isRefreshingNpcDropdown = false
-    coverDropdownText(pluginPage.npcDropdown, selected == nil)
+    -- The closed box shows the name of the NPC chosen (it can be another name of the group, picked as a variant) until
+    -- the dropdown is opened, and nothing if the NPC isn't in the list.
+    local chosenMember = Settings.chosenNpcID and NpcDirectory.memberOfNpc(Settings.chosenNpcID) or nil
+    if selected ~= nil and chosenMember ~= nil then
+        coverDropdownText(pluginPage.npcDropdown, true, NpcDirectory.labelOfMember(chosenMember))
+    else
+        coverDropdownText(pluginPage.npcDropdown, selected == nil)
+    end
     pcall(function()
         pluginPage.matchCountText.content = matchCount == RESULTS_SHOWN and ("Showing the first " .. RESULTS_SHOWN .. " matches.")
             or (matchCount .. " matches.")

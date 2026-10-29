@@ -157,6 +157,18 @@ function NpcDirectory.groupOfNpc(npcID)
     return groupByNpcID[npcID]
 end
 
+-- The name of the group (a member) that this NPC has, or nil. (A group holds several names; the NPC chosen can be of any.)
+function NpcDirectory.memberOfNpc(npcID)
+    local npcGroup = NpcDirectory.groupOfNpc(npcID)
+    if npcGroup == nil then return nil end
+    for _, member in ipairs(npcGroup.members) do
+        for _, memberNpcID in ipairs(member.ids) do
+            if memberNpcID == npcID then return member end
+        end
+    end
+    return nil
+end
+
 -- The dropdown's label for a group: its name, and how many variants it has if more than one (`count`: the ones
 -- listed; all of them if not given).
 function NpcDirectory.labelOfGroup(npcGroup, variantCount)
