@@ -237,31 +237,35 @@ local function onVariableTransmitted(event)
     if DIALOGUE_UPDATE_VARIABLE_IDS[event.var.id] then framesToRecheck = FRAMES_TO_RECHECK end
 end
 
--- Listens while one of the boxes that can hold the player's head is handled, and stops when neither is.
-local function updateVariableSubscription()
-    local wanted = handledBoxes[PLAYER_LINE_INTERFACE] or handledBoxes[PAIR_INTERFACE]
-    if wanted and not listeningForUpdates then
-        Event.VarTransmit.Subscribe(VARIABLE_SUBSCRIPTION, onVariableTransmitted)
-        listeningForUpdates = true
-    elseif not wanted and listeningForUpdates then
-        Event.VarTransmit.Unsubscribe(VARIABLE_SUBSCRIPTION)
-        listeningForUpdates = false
-        framesToRecheck = 0
-    end
+-- Starts listening (when a box that can hold the player's head has been handled).
+local function startListeningForUpdates()
+    if listeningForUpdates then return end
+    Event.VarTransmit.Subscribe(VARIABLE_SUBSCRIPTION, onVariableTransmitted)
+    listeningForUpdates = true
+end
+
+-- Stops listening when neither of those boxes is handled any more.
+local function stopListeningIfNoBoxHandled()
+    if not listeningForUpdates or handledBoxes[PLAYER_LINE_INTERFACE] or handledBoxes[PAIR_INTERFACE] then return end
+    Event.VarTransmit.Unsubscribe(VARIABLE_SUBSCRIPTION)
+    listeningForUpdates = false
+    framesToRecheck = 0
 end
 
 -- For the plugin shutting down.
 function HeadSwap.stop()
     handledBoxes = {}
-    updateVariableSubscription()
+    stopListeningIfNoBoxHandled()
 end
 
 -- The head components of a box that has opened, swapped once.
 local function handleBox(interface)
     npcIDToShow = Settings.chosenNpcID
     if interface == PLAYER_LINE_INTERFACE then
+        startListeningForUpdates()
         visitHead(swapHeadVisit, PLAYER_LINE_INTERFACE, HEAD_STATIC_ID, "1191:8")
     elseif interface == PAIR_INTERFACE then
+        startListeningForUpdates()
         visitHead(swapHeadVisit, PAIR_INTERFACE, HEAD_STATIC_ID, "1187:8")
         visitHead(swapHeadVisit, PAIR_INTERFACE, PAIR_SECOND_HEAD_STATIC_ID, "1187:13")
     elseif npcIDToShow ~= nil then
@@ -272,7 +276,7 @@ end
 -- What a closed box leaves behind is let go (the game fills it again when it opens).
 local function forgetBox(interface)
     handledBoxes[interface] = nil
-    updateVariableSubscription()
+    stopListeningIfNoBoxHandled()
     if interface == PLAYER_LINE_INTERFACE then
         writtenAnimation["1191:8"], gameAnimation["1191:8"], swappedHeads["1191:8"] = nil, nil, nil
     elseif interface == PAIR_INTERFACE then
@@ -294,7 +298,6 @@ local function watchBox(interface)
     if isInterfaceOpen(interface) then
         if not handledBoxes[interface] then
             handledBoxes[interface] = true
-            updateVariableSubscription()
             pcall(handleBox, interface)
         end
     elseif handledBoxes[interface] then
@@ -318,7 +321,7 @@ end
 -- Logout: the boxes are gone.
 function HeadSwap.reset()
     writtenAnimation, gameAnimation, swappedHeads, handledBoxes = {}, {}, {}, {}
-    updateVariableSubscription()
+    stopListeningIfNoBoxHandled()
 end
 
 return HeadSwap
