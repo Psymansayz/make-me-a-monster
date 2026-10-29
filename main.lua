@@ -205,9 +205,10 @@ local function refreshNpcDropdown()
         -- While searching, an entry shows the name that matched, if it was one name of the group. The entry of the group
         -- the NPC chosen is in shows that NPC's name instead (it can be another name of the group, picked as a variant):
         -- it stays when the dropdown is opened and closed without picking, and goes when another entry is picked.
-        local matchedMember = NpcDirectory.memberMatching(npcGroup, query)
-        if npcGroup == chosenGroup and chosenMember ~= nil then matchedMember = chosenMember end
-        local label = matchedMember and NpcDirectory.labelOfMember(matchedMember) or NpcDirectory.labelOfGroup(npcGroup, #npcGroup.ids)
+        -- (one name is shown, with how many NPCs matched the search in all)
+        local matchedMember, matchedNpcCount = NpcDirectory.memberMatching(npcGroup, query)
+        if npcGroup == chosenGroup and chosenMember ~= nil then matchedMember, matchedNpcCount = chosenMember, nil end
+        local label = matchedMember and NpcDirectory.labelOfMember(matchedMember, matchedNpcCount) or NpcDirectory.labelOfGroup(npcGroup, #npcGroup.ids)
         entries[#entries + 1] = { label = label, id = entryID }
         groupsByEntryID[entryID] = npcGroup
         matchedMembersByEntryID[entryID] = matchedMember
