@@ -222,15 +222,16 @@ end
 local handledBoxes = {} -- interface -> true while it is open and has been handled
 
 -- A box that stays open can be filled again by the game with the next line (two lines in a row from the same side), and
--- is not seen to close in between. The server transmits the variable CHAT_V3_UPDATE_INTERFACE (id 8180) whenever a dialogue
--- box is updated (in the logs, a frame before the game filled it), so after it the open boxes are looked at again for a
--- few frames: heads the game has set again are swapped again, and heads that are already ours are left alone.
-local DIALOGUE_UPDATE_VARIABLE_ID = 8180
+-- is not seen to close in between. The server transmits variables whenever a dialogue box is updated (in the logs, a frame
+-- before the game filled it): the single boxes get CHAT_V3_UPDATE_INTERFACE (8180) and PAGEPOS (101), the pair box only
+-- PAGEPOS. After either, the open boxes are looked at again for a few frames: heads the game has set again are swapped
+-- again, and heads that are already ours are left alone.
+local DIALOGUE_UPDATE_VARIABLE_IDS = { [8180] = true, [101] = true }
 local FRAMES_TO_RECHECK = 5
 local framesToRecheck = 0
 
 Event.VarTransmit.Subscribe("make_me_a_monster_dialogue_update", function(event)
-    if event.var.id == DIALOGUE_UPDATE_VARIABLE_ID then framesToRecheck = FRAMES_TO_RECHECK end
+    if DIALOGUE_UPDATE_VARIABLE_IDS[event.var.id] then framesToRecheck = FRAMES_TO_RECHECK end
 end)
 
 -- For the plugin shutting down.
