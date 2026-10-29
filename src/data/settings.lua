@@ -1,6 +1,8 @@
 -- The settings, saved in PersistentDB (shared by every character on this PC), each as an integer entry under its
 -- own key. An entry that isn't there reads as nil, which is the default; a setting with nothing chosen is saved as -1.
 
+local PlayerAnims = require("src/data/player_head_animations")
+
 local Settings = {}
 
 Settings.npcID = nil -- the NPC whose head replaces the player's, or nil for none
@@ -21,7 +23,15 @@ end
 function Settings.load()
     Settings.npcID = saved("npcID")
     Settings.animID = saved("animID")
-    Settings.animOverride = saved("animOverride")
+    -- Nothing saved at all: evil laugh, the player's or the NPC's kind by the head in use. (Saved as -1: the player
+    -- chose the default animation.)
+    local anim = PersistentDB:GetInt("animOverride")
+    if anim == nil then
+        anim = Settings.npcID and PlayerAnims.npcFallback or PlayerAnims.fallback
+    elseif anim < 0 then
+        anim = nil
+    end
+    Settings.animOverride = anim
     Settings.headScale = saved("headScale") or 100
     Settings.variantsWidth, Settings.variantsHeight = saved("variantsWidth"), saved("variantsHeight")
     Settings.galleryWidth, Settings.galleryHeight = saved("galleryWidth"), saved("galleryHeight")

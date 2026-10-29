@@ -49,6 +49,8 @@ return {
     -- Where an NPC animation has no player twin, the one used when switching to the player's own head:
     -- HUMAN_ACTOR_CHATHEAD_EVIL_LAUGH_STANDARD.
     fallback = 37913,
+    -- The same for an NPC head: HUMAN_UPDATE_CHATHEAD_EVIL_LAUGH_LEN_ALL.
+    npcFallback = 9842,
     -- Every animation listed while the player's own head is in use.
     actors = {
         37902,
