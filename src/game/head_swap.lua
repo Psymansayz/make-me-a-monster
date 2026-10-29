@@ -129,6 +129,9 @@ local scaled = {} -- component key -> { original, written }: the view distance t
 -- The player's own head, left in place and given the animation chosen: component key -> the animation written, and
 -- the one the game set (to put back when the choice is cleared).
 local written, gameAnim = {}, {}
+-- A player head turned into an NPC's: component key -> { npc = the NPC's id, anim = the animation the game set on the
+-- player's head }, to change the head when another NPC is chosen and to put the player's head back.
+local swapped = {}
 
 -- The head drawn Settings.headScale times larger by moving the camera closer: the view distance is the game's divided
 -- by the scale. The game sets the view distance itself when it fills a box, so a value other than the one written
@@ -158,11 +161,24 @@ end
 -- player's own head stays, playing the animation the player picked. Either way it is drawn at the size set.
 local function swap(component, npcID, key)
     if component.visibleGlobal ~= true then
-        scaled[key], written[key], gameAnim[key] = nil, nil, nil
+        scaled[key], written[key], gameAnim[key], swapped[key] = nil, nil, nil, nil
         return
     end
     local modelType = tonumber(component.modelType)
+    local ours = swapped[key]
+    if ours ~= nil and (ours.npc == npcID or modelType ~= NPC_HEAD or component.modelID1 ~= ours.npc) then
+        -- (still ours with the same NPC, or the game has set the head again: nothing to change)
+        if ours.npc ~= npcID then swapped[key] = nil end
+        ours = nil
+    end
     if npcID == nil then
+        if ours ~= nil then
+            -- "Use my own head": the player's head again, with the animation the game had set on it.
+            swapped[key] = nil
+            component:SetModel(ui.ModelType.PLAYER_HEAD, -1)
+            if ours.anim ~= nil then component.animID = ours.anim end
+            modelType = tonumber(component.modelType)
+        end
         if modelType == PLAYER_HEAD then
             local current = tonumber(component.animID)
             local mine = written[key]
@@ -180,6 +196,14 @@ local function swap(component, npcID, key)
         end
         return
     end
+    if ours ~= nil then
+        -- Another NPC chosen: its head in place of the one shown.
+        ours.npc = npcID
+        component:SetModel(ui.ModelType.NPC_HEAD, npcID)
+        HeadSwap.animate(component)
+        applyScale(key, component)
+        return
+    end
     if modelType == NPC_HEAD and component.modelID1 == npcID then
         HeadSwap.animate(component) -- (already ours: the animation kept up)
         applyScale(key, component)
@@ -192,6 +216,7 @@ local function swap(component, npcID, key)
     if playerAnim ~= nil and playerAnim >= 0 then
         HeadSwap.playerAnim = npcTwinOf(playerAnim)
     end
+    swapped[key] = { npc = npcID, anim = playerAnim }
     component:SetModel(ui.ModelType.NPC_HEAD, npcID)
     HeadSwap.animate(component)
     applyScale(key, component)
@@ -202,7 +227,8 @@ function HeadSwap.tick()
     local npcID = Settings.npcID
     if npcID ~= nil then pcall(learn) end -- (the NPC's own animation is only used with an NPC's head)
     -- (nothing to do with no NPC, no animation chosen, normal size and no size left to put back)
-    if npcID == nil and Settings.animOverride == nil and Settings.headScale <= 1 and next(scaled) == nil and next(written) == nil then return end
+    if npcID == nil and Settings.animOverride == nil and Settings.headScale <= 1 and next(scaled) == nil and next(written) == nil
+        and next(swapped) == nil then return end
     for _, interface in ipairs(INTERFACES) do
         local ok, statics = false, nil
         if isOpen(interface) then ok, statics = pcall(modelStatics, interface) end
@@ -219,6 +245,7 @@ end
 -- Logout: the boxes are gone, so what was found about them is looked up again.
 function HeadSwap.reset()
     headStatics = {}
+    scaled, written, gameAnim, swapped = {}, {}, {}, {}
 end
 
 return HeadSwap
