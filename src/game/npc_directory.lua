@@ -202,10 +202,13 @@ end
 
 -- The name of the group (a member) that matched the query, for the dropdown to show: of the names whose own text and ids hold
 -- every word of the query, the shortest (the most general: "Goblin" before "Goblin guard"), the first if equal. Also how
--- many NPCs the matching names have in all. Nil if the query is blank or its words are spread over different names.
+-- many NPCs the matching names have in all. Nil if the query is blank, is exactly the name of the group, or its words
+-- are spread over different names.
 function NpcDirectory.memberMatching(npcGroup, query)
     local queryWords = wordsOfQuery(query)
     if #queryWords == 0 then return nil end
+    -- A query that is exactly the name of the group needs no other name shown: the group's own label says it.
+    if table.concat(queryWords, " ") == NpcDirectory.lowerCaseAscii(npcGroup.name) then return nil end
     local best, matchingNpcCount = nil, 0
     for _, member in ipairs(npcGroup.members) do
         if containsEveryWord(searchOfMember(member), queryWords) then
@@ -320,7 +323,7 @@ for queryWord in ("tzhaar dragon man gnome"):gmatch("%S+") do ALWAYS_GROUP[query
 -- NPC's variants, and adjectives (which describe an NPC, or say whose side it is on, instead of saying what it
 -- is).
 local NO_GROUP = {}
-for queryWord in ("king commander general guardian giant claus lord brother lady master hunter sergeant jack ranger "
+for queryWord in ("black king commander general guardian giant claus lord brother lady master hunter sergeant jack ranger "
     .. "armour chaos dark evil father head magic pete queen varrock ambassador blood death director dwarven "
     .. "lumbridge rex abyssal hat tiny lieutenant instructor prince sentinel bobbled trainer dr fire chosen "
     .. "class creature ice major mayor pet red royal snow strange war ali "

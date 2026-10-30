@@ -1,6 +1,6 @@
-"""Development tool: makes src/data/heads.lua from the HEADS| lines the plugin logs after a scan.
+"""Development tool: makes src/data/listed_heads.lua from the HEADS| lines the plugin logs after a scan.
 
-To make the list again (new NPCs, new blacklisted heads, changed merging rules): move src/data/heads.lua away,
+To make the list again (new NPCs, new blacklisted heads, changed merging rules): move src/data/listed_heads.lua away,
 reload the plugin (prl make_me_a_monster), open its page, wait until "HEADS|end" is logged, paste the console
 lines into a text file and run:  python tools/make_heads_list.py <that file>
 """
@@ -48,5 +48,5 @@ for name, members in groups:
     parts = ", ".join("{ %s, { %s } }" % (q(n), ", ".join(map(str, ids))) for n, ids in members)
     out.append("        { name = %s, members = { %s } }," % (q(name), parts))
 out += ["    },", "}", ""]
-open(os.path.join(root, "src", "data", "heads.lua"), "w", encoding="utf8").write("\n".join(out))
+open(os.path.join(root, "src", "data", "listed_heads.lua"), "w", encoding="utf8").write("\n".join(out))
 print(f"written: {len(groups)} entries, {heads} heads")
