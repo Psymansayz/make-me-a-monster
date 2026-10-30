@@ -134,10 +134,13 @@ end
 
 -- The name of the group (a member) that matched the query, for the dropdown to show: of the names whose own text and ids hold
 -- every word of the query, the shortest (the most general: "Goblin" before "Goblin guard"), the first if equal. Also how
--- many NPCs the matching names have in all. Nil if the query is blank or its words are spread over different names.
+-- many NPCs the matching names have in all. Nil if the query is blank, is exactly the name of the group, or its words
+-- are spread over different names.
 function NpcDirectory.memberMatching(npcGroup, query)
     local queryWords = wordsOfQuery(query)
     if #queryWords == 0 then return nil end
+    -- A query that is exactly the name of the group needs no other name shown: the group's own label says it.
+    if table.concat(queryWords, " ") == NpcDirectory.lowerCaseAscii(npcGroup.name) then return nil end
     local best, matchingNpcCount = nil, 0
     for _, member in ipairs(npcGroup.members) do
         if containsEveryWord(searchOfMember(member), queryWords) then
