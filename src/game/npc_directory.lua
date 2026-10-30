@@ -168,6 +168,12 @@ function NpcDirectory.loadBaked(listedHeadsData)
     NpcDirectory.baked, NpcDirectory.done, NpcDirectory.regrouped = true, true, true
 end
 
+-- The names of a group (members). A name read from the game that has not been merged yet (while the NPCs are being read, in
+-- the dev scan) has none: it is its own one name.
+local function membersOf(npcGroup)
+    return npcGroup.members or { npcGroup }
+end
+
 -- The text a search looks in for one name of a group: the name (as it is and with plain letters) and its ids.
 local function searchOfMember(member)
     if member.search == nil then
@@ -180,7 +186,7 @@ end
 local function searchOf(npcGroup)
     if npcGroup.search == nil then
         local searchParts = {}
-        for _, member in ipairs(npcGroup.members) do searchParts[#searchParts + 1] = searchOfMember(member) end
+        for _, member in ipairs(membersOf(npcGroup)) do searchParts[#searchParts + 1] = searchOfMember(member) end
         npcGroup.search = table.concat(searchParts, " ")
     end
     return npcGroup.search
@@ -210,7 +216,7 @@ function NpcDirectory.memberMatching(npcGroup, query)
     -- A query that is exactly the name of the group needs no other name shown: the group's own label says it.
     if table.concat(queryWords, " ") == NpcDirectory.lowerCaseAscii(npcGroup.name) then return nil end
     local best, matchingNpcCount = nil, 0
-    for _, member in ipairs(npcGroup.members) do
+    for _, member in ipairs(membersOf(npcGroup)) do
         if containsEveryWord(searchOfMember(member), queryWords) then
             matchingNpcCount = matchingNpcCount + #member.ids
             if best == nil or #member.name < #best.name then best = member end
@@ -277,7 +283,7 @@ end
 function NpcDirectory.memberOfNpc(npcID)
     local npcGroup = NpcDirectory.groupOfNpc(npcID)
     if npcGroup == nil then return nil end
-    for _, member in ipairs(npcGroup.members) do
+    for _, member in ipairs(membersOf(npcGroup)) do
         for _, memberNpcID in ipairs(member.ids) do
             if memberNpcID == npcID then return member end
         end
