@@ -235,14 +235,9 @@ local function showPage()
     end
 end
 
--- Workaround: the page is changed from the next frame: the buttons that ask are not destroyed or rebuilt
--- during their own click.
-local pendingPageChange = 0
-
-local function applyPageChange()
-    local pageChange = pendingPageChange
-    pendingPageChange = 0
-    if windowState == nil or pageChange == 0 then return end
+-- Moves by this many pages (one back, one on).
+local function changePage(pageChange)
+    if windowState == nil then return end
     local page = math.max(1, math.min(windowState.pages, windowState.page + pageChange))
     if page == windowState.page then return end
     windowState.page = page
@@ -298,7 +293,6 @@ function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPic
     end
     windowState = { ids = variantIDs, page = 1, pages = math.max(1, math.ceil(#variantIDs / PAGE_SIZE)), current = current,
         onPick = onPick, labelFor = labelFor, cells = {}, nav = { buttons = {} } }
-    pendingPageChange = 0
     local openedState = windowState
     local succeeded, errorMessage = pcall(function()
         openedState.window = PrettyUI.Window.new(parent, {
@@ -311,8 +305,7 @@ function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPic
                 if windowState == openedState then
                     reportWindowPlacement(openedState)
                     destroyCells()
-                    Event.Draw.Unsubscribe("make_me_a_monster_variants_window")
-                    windowState, pendingPageChange = nil, 0
+                    windowState = nil
                 end
             end,
         })
@@ -329,14 +322,17 @@ function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPic
         openedState.nav.label.rgba = TEXT_LIGHT
         openedState.nav.label.alignHorizontal = ui.AlignMode.CENTRE
         -- (no angle brackets in the button text: the game reads "<" as the start of a markup tag)
-        local previousButton = PrettyUI.SimpleButton.new(windowContent, "Previous", function() pendingPageChange = -1 end,
+        local previousButton = PrettyUI.SimpleButton.new(windowContent, "Previous", function() changePage(-1) end,
             { x = PAD, y = 0, width = NAV_BUTTON })
-        local nextButton = PrettyUI.SimpleButton.new(windowContent, "Next", function() pendingPageChange = 1 end,
+        local nextButton = PrettyUI.SimpleButton.new(windowContent, "Next", function() changePage(1) end,
             { x = PAD, y = 0, width = NAV_BUTTON })
         openedState.nav.buttons = { previousButton, nextButton }
     end)
     showPage()
-    Event.Draw.Subscribe("make_me_a_monster_variants_window", function() pcall(VariantsWindow.tick) end)
+    -- The window's content changes size a moment after the window is resized: the cells are placed again when it does.
+    windowContent:Subscribe(ui.Hook.ONRESIZE, function()
+        if windowState == openedState then layoutWindow() end
+    end)
     return true
 end
 
@@ -345,22 +341,13 @@ function VariantsWindow.close()
     local window = windowState.window
     reportWindowPlacement(windowState)
     destroyCells()
-    Event.Draw.Unsubscribe("make_me_a_monster_variants_window")
-    windowState, pendingPageChange = nil, 0
+    windowState = nil
     pcall(function() window:Destroy() end)
 end
 
--- Every frame while the window is open: turns the page, and fits the cells to the window's size.
-function VariantsWindow.tick()
-    applyPageChange()
-    if windowState ~= nil and windowState.window ~= nil then
-        local succeeded, width, height = pcall(function()
-            return windowState.window.content.width, windowState.window.content.height
-        end)
-        if succeeded and (width ~= windowState.layoutW or height ~= windowState.layoutH or currentHeadScale() ~= windowState.layoutScale) then
-            layoutWindow()
-        end
-    end
+-- The head size was changed (the slider): the heads in the window are drawn at the new size.
+function VariantsWindow.refreshHeadSize()
+    if windowState ~= nil then layoutWindow() end
 end
 
 return VariantsWindow

@@ -289,6 +289,16 @@ function AllHeadsWindow.isOpen()
     return windowState ~= nil
 end
 
+-- Moves by this many pages (one back, one on).
+local function changePage(pageChange)
+    if windowState == nil then return end
+    local page = math.max(1, math.min(windowState.pages, windowState.page + pageChange))
+    if page ~= windowState.page then
+        windowState.page = page
+        showPage()
+    end
+end
+
 function AllHeadsWindow.open(PrettyUI, parent, heads, current, onPick, nameOf)
     if windowState ~= nil then AllHeadsWindow.close() end
     local width, height = AllHeadsWindow.defaultSize(parent)
@@ -328,7 +338,6 @@ function AllHeadsWindow.open(PrettyUI, parent, heads, current, onPick, nameOf)
                 if windowState == openedState then
                     reportWindowPlacement(openedState)
                     destroyCells()
-                    Event.Draw.Unsubscribe("make_me_a_monster_all_heads_window")
                     windowState = nil
                     if AllHeadsWindow.onClosed then pcall(AllHeadsWindow.onClosed) end
                 end
@@ -342,17 +351,26 @@ function AllHeadsWindow.open(PrettyUI, parent, heads, current, onPick, nameOf)
     local windowContent = openedState.window.content
     pcall(function()
         local navigation = openedState.nav
-        navigation.turn = 0
         -- (no angle brackets in the button text: the game reads "<" as the start of a markup tag)
-        navigation.previous = PrettyUI.SimpleButton.new(windowContent, "Previous", function() navigation.turn = -1 end, { width = 80 })
-        navigation.after = PrettyUI.SimpleButton.new(windowContent, "Next", function() navigation.turn = 1 end, { width = 80 })
+        navigation.previous = PrettyUI.SimpleButton.new(windowContent, "Previous", function() changePage(-1) end, { width = 80 })
+        navigation.after = PrettyUI.SimpleButton.new(windowContent, "Next", function() changePage(1) end, { width = 80 })
         navigation.search = PrettyUI.TextField.new(windowContent, {
             width = 204, height = 30, placeholder = "Search name or id",
-            onChange = function(_, _, text) openedState.query, openedState.searchDirty = text, true end,
+            onChange = function(_, _, text)
+                if windowState ~= openedState then return end
+                openedState.query = text
+                applySearch()
+                showPage()
+            end,
         })
         navigation.jump = PrettyUI.TextField.new(windowContent, {
             width = 70, height = 30, placeholder = "Page", filterMode = ui.InputFieldFilterMode.NUMERIC,
-            onSubmit = function(_, text) navigation.jumpTo = tonumber(text) end,
+            onSubmit = function(_, text)
+                local page = tonumber(text)
+                if windowState ~= openedState or page == nil then return end
+                windowState.page = page
+                showPage()
+            end,
         })
         navigation.label = ui.Text.new(windowContent)
         navigation.label.maxLines = 1
@@ -360,7 +378,10 @@ function AllHeadsWindow.open(PrettyUI, parent, heads, current, onPick, nameOf)
         navigation.label.rgba = TEXT_LIGHT
     end)
     showPage()
-    Event.Draw.Subscribe("make_me_a_monster_all_heads_window", function() pcall(AllHeadsWindow.tick) end)
+    -- The window's content changes size a moment after the window is resized: the cells are placed again when it does.
+    windowContent:Subscribe(ui.Hook.ONRESIZE, function()
+        if windowState == openedState then layoutWindow() end
+    end)
     return true
 end
 
@@ -369,37 +390,14 @@ function AllHeadsWindow.close()
     local window = windowState.window
     reportWindowPlacement(windowState)
     destroyCells()
-    Event.Draw.Unsubscribe("make_me_a_monster_all_heads_window")
     windowState = nil
     pcall(function() window:Destroy() end)
     if AllHeadsWindow.onClosed then pcall(AllHeadsWindow.onClosed) end
 end
 
--- Every frame while the window is open: does what the buttons and boxes asked for (not inside their own handlers), and fits the cells to the
--- window's size.
-function AllHeadsWindow.tick()
-    if windowState == nil or windowState.window == nil then return end
-    local navigation = windowState.nav
-    if windowState.searchDirty then
-        windowState.searchDirty = false
-        applySearch()
-        showPage()
-    end
-    if navigation.turn ~= nil and navigation.turn ~= 0 then
-        local pageChange = navigation.turn
-        navigation.turn = 0
-        local page = math.max(1, math.min(windowState.pages, windowState.page + pageChange))
-        if page ~= windowState.page then
-            windowState.page = page
-            showPage()
-        end
-    end
-    if navigation.jumpTo ~= nil then
-        windowState.page, navigation.jumpTo = navigation.jumpTo, nil
-        showPage()
-    end
-    local succeeded, width, height = pcall(function() return windowState.window.content.width, windowState.window.content.height end)
-    if succeeded and (width ~= windowState.layoutW or height ~= windowState.layoutH or currentHeadScale() ~= windowState.layoutScale) then layoutWindow() end
+-- The head size was changed (the slider): the heads in the window are drawn at the new size.
+function AllHeadsWindow.refreshHeadSize()
+    if windowState ~= nil then layoutWindow() end
 end
 
 return AllHeadsWindow

@@ -355,6 +355,8 @@ local function buildPage(pluginLayer)
             local percent = math.max(100, math.min(300, math.floor(sliderValue / 5 + 0.5) * 5))
             Settings.setHeadSizePercent(percent)
             HeadSwap.refreshHeadViewDistance() -- (the heads shown now follow)
+            AllHeadsWindow.refreshHeadSize()
+            VariantsWindow.refreshHeadSize()
             pcall(function() pageControls.headSizeText.content = "Head size: " .. percent .. "%" end)
         end,
     })
