@@ -37,6 +37,7 @@ local function addPlainLetters(letters, ...)
     for character in letters:gmatch("[\194-\244][\128-\191]*") do PLAIN_LETTERS[character] = { ... } end
 end
 
+-- The game does not use all of these letters at the moment, but they are included for completeness and future use.
 addPlainLetters("àáâãäåāăąǎÀÁÂÃÄÅĀĂĄǍ", "a")
 addPlainLetters("æÆ", "ae")
 addPlainLetters("çćĉċčÇĆĈĊČ", "c")
@@ -508,6 +509,27 @@ function NpcDirectory.searchGroups(query, maxResults, visibleIds)
         end
     end
     return matchingGroups
+end
+
+-- The heads the plugin lists, one per id, in name order; idsOf(group) -> the ids of a group worth showing (all of them
+-- if not given). Made once: the list does not change while the plugin runs.
+local headsInNameOrder = nil
+
+function NpcDirectory.headsInNameOrder(idsOf)
+    if headsInNameOrder ~= nil then return headsInNameOrder end
+    local heads, lowered = {}, {}
+    for _, npcGroup in ipairs(NpcDirectory.groups) do
+        for _, npcID in ipairs(idsOf and idsOf(npcGroup) or npcGroup.ids) do
+            heads[#heads + 1] = npcID
+            lowered[npcID] = NpcDirectory.lowerCaseAscii(NpcDirectory.nameOfNpc(npcID) or "")
+        end
+    end
+    table.sort(heads, function(a, b)
+        if lowered[a] ~= lowered[b] then return lowered[a] < lowered[b] end
+        return a < b
+    end)
+    headsInNameOrder = heads
+    return heads
 end
 
 return NpcDirectory

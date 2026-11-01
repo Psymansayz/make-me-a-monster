@@ -180,7 +180,7 @@ local function fillCell(headCell, npcID)
         windowState.setup(headCell.model, npcID)
     else
         headCell.model:SetModel(ui.ModelType.NPC_HEAD, npcID)
-        local animationID = windowState.animFor and windowState.animFor() or nil
+        local animationID = windowState.animFor and windowState.animFor(npcID) or nil
         if animationID ~= nil then headCell.model.animID = animationID end
     end
     headCell.name.content = windowState.nameOf(npcID) or "?"
@@ -251,6 +251,11 @@ local function applySearch()
     end
     windowState.pages = math.max(1, math.ceil(#windowState.shown / PAGE_SIZE))
     windowState.page = 1
+end
+
+-- The animation chosen changed: the cells filled again (the setup plays the one chosen now).
+function HeadFlaggingWindow.updateAnimations()
+    if windowState ~= nil then showPage() end
 end
 
 function HeadFlaggingWindow.isOpen()

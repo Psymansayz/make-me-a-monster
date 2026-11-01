@@ -71,6 +71,47 @@ local function signature(npcID)
     return cache[npcID]
 end
 
+-- Development: every field of an NPC's head customisation as text, for telling apart heads the signature calls alike.
+function HeadFilter.describeHead(npcID)
+    local succeeded, text = pcall(function()
+        local custom = ui.NPCCustomisation.new(npcID, false)
+        if custom == nil then return "no customisation" end
+        local parts = {}
+        for _, field in ipairs({ "isPlayerClone", "modelList", "modelScaleList", "modelRecolourList", "modelRematerialList",
+            "recolourDest", "rematerialDest", "playerIdkColour" }) do
+            parts[#parts + 1] = field .. "=" .. describe(custom[field])
+        end
+        return table.concat(parts, " ")
+    end)
+    return succeeded and text or ("unreadable: " .. tostring(text))
+end
+
+-- Development: the model ids of an NPC's head, in order (none if it has no models or can't be read).
+function HeadFilter.headModels(npcID)
+    local models = {}
+    pcall(function()
+        local custom = ui.NPCCustomisation.new(npcID, false)
+        local function note(modelID)
+            if type(modelID) == "number" then models[#models + 1] = modelID end
+        end
+        local listed = pcall(function() for _, modelID in ipairs(custom.modelList) do note(modelID) end end)
+        if not listed or #models == 0 then
+            pcall(function() for _, modelID in pairs(custom.modelList) do note(modelID) end end)
+        end
+    end)
+    return models
+end
+
+-- Development: the highest model id of an NPC's head (0 if it has none). Model ids are given out in order, so the
+-- highest tells roughly how new the head is.
+function HeadFilter.newestModel(npcID)
+    local highest = 0
+    for _, modelID in ipairs(HeadFilter.headModels(npcID)) do
+        if modelID > highest then highest = modelID end
+    end
+    return highest
+end
+
 -- The ids worth showing from `ids` (in order): those with a head model, the first of each look. Only these
 -- can be made the active head, so the active one is never a hidden one. Blacklisted ids are left out without
 -- being checked.
