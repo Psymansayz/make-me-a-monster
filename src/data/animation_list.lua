@@ -134,4 +134,11 @@ return {
     fallback = 37913,
     -- The same for an NPC head: HUMAN_UPDATE_CHATHEAD_EVIL_LAUGH_LEN_ALL.
     npcFallback = 9842,
+    -- NPC heads built on the player's rig (newer models), which play the player's animations and not the NPC ones:
+    -- { [npc id] = true }, listed heads only (found with the dev debug window on the blacklisted heads).
+    headsOnPlayerRig = {
+        [11701] = true, [11702] = true, [12166] = true, [17208] = true, [28050] = true, [28052] = true,
+        [28228] = true, [28445] = true, [28467] = true, [30099] = true, [30901] = true, [30902] = true,
+        [30903] = true, [31406] = true, [31432] = true, [32506] = true, [32679] = true,
+    },
 }
