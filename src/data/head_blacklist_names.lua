@@ -3680,5 +3680,6 @@ return {
         [23385]="Harley",
         [8769]="Black Guard", [30730]="Bilrach",
         [7497]="Golem guard", [7498]="Golems remains", [21083]="Golden loot beam",
+        [16895]="Akthanakos",
     },
 }
