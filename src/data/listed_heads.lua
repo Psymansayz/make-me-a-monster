@@ -989,7 +989,7 @@ return {
         { name = "Papa Mambo", members = { { "Papa Mambo", { 3122 } } } },
         { name = "Pentyn", members = { { "Pentyn", { 3126 } } } },
         { name = "Boneguard", members = { { "Boneguard", { 3129, 3140 } } } },
-        { name = "Enakhra", members = { { "Enakhra", { 3137, 3138, 3148, 14274, 14288, 16894 } } } },
+        { name = "Enakhra", members = { { "Enakhra", { 3137, 3138, 3148, 14274, 14288 } } } },
         { name = "Akthanakos", members = { { "Akthanakos", { 3141, 3142, 3149, 14275, 14289 } } } },
         { name = "Lazim", members = { { "Lazim", { 3147 } } } },
         { name = "Charley", members = { { "Charley", { 3161 } } } },
