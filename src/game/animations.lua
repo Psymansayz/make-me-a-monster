@@ -30,6 +30,11 @@ function Animations.isPlayerAnimation(animationID)
     return listed ~= nil and listed.isPlayerAnimation
 end
 
+-- Whether the NPC head with this id plays the player's animations (it is built on the player's rig).
+function Animations.isOnPlayerRig(npcID)
+    return AnimationList.headsOnPlayerRig[npcID] == true
+end
+
 -- The animations for the player's own head if `forPlayerHead`, else those for NPC heads: { id, label }, in the order
 -- shown.
 function Animations.options(forPlayerHead)
