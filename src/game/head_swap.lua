@@ -6,26 +6,36 @@
 
 local Animations = require("src/game/animations")
 local Settings = require("src/data/settings")
+local GameIds = require("src/game/game_ids")
 
 local HeadSwap = {}
 
 -- The NPC version of the animation the game last set on the player's head, before it was swapped (nil if it has none).
 local npcVersionOfGameAnimation = nil
 
--- The dialogue boxes and the model components in them that hold a head. These are fixed in the game (seen in its logs):
---   1184 (CHAT_V2_LEFT): the NPC's line, one head, component 8, always the NPC's own.
---   1191 (CHAT_V2_RIGHT): the player's line, one head, component 8.
---   1187 (CHAT_V2_PAIR): two heads, components 8 and 13; each can hold the player, an NPC, or in a dialogue without the
---   player, two NPCs. Only a component holding the player's head is changed.
-local NPC_SPEECH_INTERFACE = 1184
-local PLAYER_LINE_INTERFACE = 1191
-local PAIR_INTERFACE = 1187
-local HEAD_STATIC_ID = 8
-local PAIR_SECOND_HEAD_STATIC_ID = 13
-local PAIR_COMPONENT_KEYS = { "1187:8", "1187:13" } -- (the keys of the per-component records below)
+-- The dialogue boxes and the model components in them that hold a head:
+--   CHAT_V2_LEFT: the NPC's line, one head, always the NPC's own.
+--   CHAT_V2_RIGHT: the player's line, one head.
+--   CHAT_V2_PAIR: two heads; each can hold the player, an NPC, or in a dialogue without the player, two NPCs. Only a
+--   component holding the player's head is changed.
+-- A box or a head the game does not know by its name is left out (nil, or not in the list).
+local NPC_SPEECH_INTERFACE = GameIds.resolve("Interface", "CHAT_V2_LEFT")
+local PLAYER_LINE_INTERFACE = GameIds.resolve("Interface", "CHAT_V2_RIGHT")
+local PAIR_INTERFACE = GameIds.resolve("Interface", "CHAT_V2_PAIR")
 
-local PLAYER_HEAD_MODEL_TYPE = 3 -- ui.ModelType values
-local NPC_HEAD_MODEL_TYPE = 2
+-- The combined ids of the components with these names.
+local function headComponents(...)
+    local components = {}
+    for _, name in ipairs({ ... }) do components[#components + 1] = GameIds.resolve("Component", name) end
+    return components
+end
+
+local NPC_SPEECH_HEADS = headComponents("CHAT_V2_LEFT__CHATHEAD_1")
+local PLAYER_LINE_HEADS = headComponents("CHAT_V2_RIGHT__CHATHEAD_1")
+local PAIR_HEADS = headComponents("CHAT_V2_PAIR__CHATHEAD_LEFT", "CHAT_V2_PAIR__CHATHEAD_RIGHT")
+
+local PLAYER_HEAD_MODEL_TYPE = ui.ModelType.PLAYER_HEAD
+local NPC_HEAD_MODEL_TYPE = ui.ModelType.NPC_HEAD
 
 -- The listed animation that has each player animation as its twin (the lowest id if several), made once from
 -- Animations.twin and Animations.alsoFor. (The player's head animations don't play on an NPC's head, their NPC
@@ -41,7 +51,7 @@ end
 
 -- Whether an interface is open now (checked first, so a closed box costs nothing more).
 local function isInterfaceOpen(interface)
-    return ui.Interfaces:GetInterface(interface) ~= nil
+    return interface ~= nil and ui.Interfaces:GetInterface(interface) ~= nil
 end
 
 -- The animation the NPC head with this id should play (in a dialogue box or a window). An NPC-rig head plays NPC
@@ -92,7 +102,7 @@ end
 
 -- Notes the animation of the NPC speech box's head, for the swapped head to use. (Called while that box is open.)
 local function learnNpcSpeechAnimation()
-    local component = ui.Interfaces:GetComponent(NPC_SPEECH_INTERFACE, HEAD_STATIC_ID)
+    local component = ui.Interfaces:GetComponent(NPC_SPEECH_HEADS[1])
     if component.visibleGlobal == true and tonumber(component.modelType) == NPC_HEAD_MODEL_TYPE then
         local animationID = tonumber(component.animID)
         if animationID ~= nil and animationID >= 0 and animationID ~= Settings.lastSeenNpcAnimationID then
@@ -101,7 +111,7 @@ local function learnNpcSpeechAnimation()
     end
 end
 
--- Per head component, by its key (interface and static id):
+-- Per head component, by its key (its combined id):
 
 -- The player's own head, left in place and given the animation chosen: the animation written, and the one the game set
 -- (to put back when the choice is cleared).
@@ -195,21 +205,18 @@ local function swapComponentHead(component, npcID, componentKey)
     writeHeadViewDistance(component)
 end
 
--- Calls visit(component, componentKey) for the head component with this id, if it can be fetched.
-local function visitHead(visit, interface, staticID, componentKey)
-    local fetched, component = pcall(ui.Interfaces.GetComponent, ui.Interfaces, interface, staticID)
-    if fetched and component ~= nil then pcall(visit, component, componentKey) end
+-- Calls visit(component, componentKey) for each of these head components that can be fetched.
+local function visitHeads(visit, headComponentIDs)
+    for _, componentKey in ipairs(headComponentIDs) do
+        local fetched, component = pcall(ui.Interfaces.GetComponent, ui.Interfaces, componentKey)
+        if fetched and component ~= nil then pcall(visit, component, componentKey) end
+    end
 end
 
 -- Calls visit(component, componentKey) for each head component of the open dialogue boxes that can show the player's head.
 local function forEachOpenHeadComponent(visit)
-    if isInterfaceOpen(PLAYER_LINE_INTERFACE) then
-        visitHead(visit, PLAYER_LINE_INTERFACE, HEAD_STATIC_ID, "1191:8")
-    end
-    if isInterfaceOpen(PAIR_INTERFACE) then
-        visitHead(visit, PAIR_INTERFACE, HEAD_STATIC_ID, "1187:8")
-        visitHead(visit, PAIR_INTERFACE, PAIR_SECOND_HEAD_STATIC_ID, "1187:13")
-    end
+    if isInterfaceOpen(PLAYER_LINE_INTERFACE) then visitHeads(visit, PLAYER_LINE_HEADS) end
+    if isInterfaceOpen(PAIR_INTERFACE) then visitHeads(visit, PAIR_HEADS) end
 end
 
 local npcIDToShow = nil -- (set by the frame function for swapHeadVisit)
@@ -231,11 +238,15 @@ end
 
 local handledBoxes = {} -- interface -> true while it is open and has been handled
 
--- A box that stays open for the next line is filled again without closing. The server sends variables 8180
--- (CHAT_V3_UPDATE_INTERFACE) and 101 (PAGEPOS) a frame before a single box is filled, 101 alone before the pair box:
+-- A box that stays open for the next line is filled again without closing. The server sends the variables
+-- CHAT_V3_UPDATE_INTERFACE and PAGEPOS a frame before a single box is filled, PAGEPOS alone before the pair box:
 -- after either, the open boxes are looked at again for a few frames (heads set again by the game are swapped again).
 -- Listened to only while a box that can hold the player's head is handled.
-local DIALOGUE_UPDATE_VARIABLE_IDS = { [8180] = true, [101] = true }
+local DIALOGUE_UPDATE_VARIABLE_IDS = {}
+for _, name in ipairs({ "CHAT_V3_UPDATE_INTERFACE", "PAGEPOS" }) do
+    local variableID = GameIds.playerVariable(name)
+    if variableID ~= nil then DIALOGUE_UPDATE_VARIABLE_IDS[variableID] = true end
+end
 local FRAMES_TO_RECHECK = 5
 local framesToRecheck = 0
 local VARIABLE_SUBSCRIPTION = "make_me_a_monster_dialogue_update"
@@ -285,11 +296,10 @@ local function handleBox(interface)
     npcIDToShow = Settings.chosenNpcID
     if interface == PLAYER_LINE_INTERFACE then
         startListeningForUpdates()
-        visitHead(swapHeadVisit, PLAYER_LINE_INTERFACE, HEAD_STATIC_ID, "1191:8")
+        visitHeads(swapHeadVisit, PLAYER_LINE_HEADS)
     elseif interface == PAIR_INTERFACE then
         startListeningForUpdates()
-        visitHead(swapHeadVisit, PAIR_INTERFACE, HEAD_STATIC_ID, "1187:8")
-        visitHead(swapHeadVisit, PAIR_INTERFACE, PAIR_SECOND_HEAD_STATIC_ID, "1187:13")
+        visitHeads(swapHeadVisit, PAIR_HEADS)
     elseif npcIDToShow ~= nil then
         learnNpcSpeechAnimation()
     end
@@ -300,12 +310,10 @@ end
 local function forgetBox(interface)
     handledBoxes[interface] = nil
     stopListeningIfNoBoxHandled()
-    if interface == PLAYER_LINE_INTERFACE then
-        writtenAnimation["1191:8"], gameAnimation["1191:8"], swappedHeads["1191:8"] = nil, nil, nil
-    elseif interface == PAIR_INTERFACE then
-        for _, componentKey in ipairs(PAIR_COMPONENT_KEYS) do
-            writtenAnimation[componentKey], gameAnimation[componentKey], swappedHeads[componentKey] = nil, nil, nil
-        end
+    local closedHeads = interface == PLAYER_LINE_INTERFACE and PLAYER_LINE_HEADS
+        or interface == PAIR_INTERFACE and PAIR_HEADS or {}
+    for _, componentKey in ipairs(closedHeads) do
+        writtenAnimation[componentKey], gameAnimation[componentKey], swappedHeads[componentKey] = nil, nil, nil
     end
 end
 

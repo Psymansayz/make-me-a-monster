@@ -841,12 +841,12 @@ Event.Draw.Subscribe("make_me_a_monster_draw", function()
 end)
 
 Event.GameStateChanged.Subscribe("make_me_a_monster_state", function(event)
-    if event.newState == 30 then
+    if event.newState == GameState.GAME then
         Settings.load()
         HeadSwap.start()
         refreshAnimationDropdown()
         refreshStatusTexts()
-    elseif event.oldState == 30 then
+    elseif event.oldState == GameState.GAME then
         HeadSwap.reset()
     end
 end)
