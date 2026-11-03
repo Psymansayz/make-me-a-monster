@@ -1,5 +1,7 @@
--- The NPCs the plugin lists: their entries and heads come from the saved list (src/data/listed_heads.lua), and nothing is
--- read from the game.
+-- The NPCs the plugin lists: their entries and heads come from the saved list (src/data/listed_heads.lua); only their
+-- ids in this game build are looked up (id.NPC).
+
+local GameIds = require("src/game/game_ids")
 
 local NpcDirectory = {}
 
@@ -81,22 +83,29 @@ end
 
 -- The entries and heads listed, as saved in src/data/listed_heads.lua. NPCs added to the game later are not listed until
 -- that file is made again.
--- data.groups = { { name, members = { { name, { id... } }... } }... }. Nothing is looked up in the game.
+-- data.groups = { { name, members = { { name, { NPC name... } }... } }... }: the names in the game (id.NPC) are turned
+-- into this build's ids here; an NPC the game does not know by its name is left out.
 function NpcDirectory.loadListedHeads(listedHeadsData)
     NpcDirectory.groups, groupByNpcID, nameByNpcID = {}, {}, {}
     for _, savedGroup in ipairs(listedHeadsData.groups or {}) do
         local npcIDs, members = {}, {}
         for _, member in ipairs(savedGroup.members) do
-            members[#members + 1] = { name = member[1], ids = member[2] }
-            for _, npcID in ipairs(member[2]) do
-                npcIDs[#npcIDs + 1] = npcID
-                nameByNpcID[npcID] = member[1]
+            local memberIDs = {}
+            for _, npcName in ipairs(member[2]) do
+                local npcID = GameIds.resolve("NPC", npcName)
+                if npcID ~= nil then
+                    memberIDs[#memberIDs + 1], npcIDs[#npcIDs + 1] = npcID, npcID
+                    nameByNpcID[npcID] = member[1]
+                end
             end
+            if #memberIDs > 0 then members[#members + 1] = { name = member[1], ids = memberIDs } end
         end
-        table.sort(npcIDs)
-        local npcGroup = { name = savedGroup.name, ids = npcIDs, members = members } -- (its search text is made when searched)
-        NpcDirectory.groups[#NpcDirectory.groups + 1] = npcGroup
-        for _, npcID in ipairs(npcIDs) do groupByNpcID[npcID] = npcGroup end
+        if #npcIDs > 0 then
+            table.sort(npcIDs)
+            local npcGroup = { name = savedGroup.name, ids = npcIDs, members = members } -- (its search text is made when searched)
+            NpcDirectory.groups[#NpcDirectory.groups + 1] = npcGroup
+            for _, npcID in ipairs(npcIDs) do groupByNpcID[npcID] = npcGroup end
+        end
     end
     NpcDirectory.isLoaded = true
 end

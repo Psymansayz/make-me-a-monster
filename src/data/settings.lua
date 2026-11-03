@@ -1,8 +1,10 @@
 -- The settings, saved in PersistentDB (shared by every character on this PC), each as an integer entry under its
 -- own key. An entry that isn't there reads as nil, which is the default; a setting with nothing chosen is saved as -1.
+-- The head and the animation chosen are saved by their names in the game too (ids can differ between game builds).
 -- The fields are set directly; only the head size has a setter (it works out the view distance).
 
-local AnimationList = require("src/data/animation_list")
+local Animations = require("src/game/animations")
+local GameIds = require("src/game/game_ids")
 
 local Settings = {}
 
@@ -29,18 +31,30 @@ local function savedInteger(settingKey)
     return savedValue ~= nil and savedValue >= 0 and savedValue or nil
 end
 
+-- The NPC whose head was chosen, or nil. Saved by name, and by id for a head whose name is not known yet (one saved by
+-- version 1.0.0, and not chosen again before the plugin's page was opened); "" with -1 for none.
+local function savedNpc()
+    local npcName = PersistentDB:GetString("npcName")
+    if npcName ~= nil and npcName ~= "" then return GameIds.resolve("NPC", npcName) end
+    return savedInteger("npcID")
+end
+
+-- The animation chosen, or nil for the default one. Saved as "": the player chose the default animation; a name this
+-- game build does not list reads as the default too.
+local function savedAnimation()
+    local animationName = PersistentDB:GetString("animName")
+    if animationName ~= nil then return animationName ~= "" and Animations.idOf(animationName) or nil end
+    -- (saved by its id before version 1.1.0; -1 for the default animation)
+    local savedID = PersistentDB:GetInt("animOverride")
+    if savedID ~= nil then return Animations.isListed(savedID) and savedID or nil end
+    -- Nothing saved at all: evil laugh, the player's or the NPC's kind by the head in use.
+    return Settings.chosenNpcID and Animations.npcFallback or Animations.fallback
+end
+
 function Settings.load()
-    Settings.chosenNpcID = savedInteger("npcID")
+    Settings.chosenNpcID = savedNpc()
     Settings.lastSeenNpcAnimationID = savedInteger("animID")
-    -- Nothing saved at all: evil laugh, the player's or the NPC's kind by the head in use. (Saved as -1: the player
-    -- chose the default animation.)
-    local animationID = PersistentDB:GetInt("animOverride")
-    if animationID == nil then
-        animationID = Settings.chosenNpcID and AnimationList.npcFallback or AnimationList.fallback
-    elseif animationID < 0 then
-        animationID = nil
-    end
-    Settings.chosenAnimationID = animationID
+    Settings.chosenAnimationID = savedAnimation()
     Settings.headViewDistance = savedInteger("headViewDistance") or Settings.DEFAULT_HEAD_VIEW_DISTANCE
     Settings.variantsWidth, Settings.variantsHeight = savedInteger("variantsWidth"), savedInteger("variantsHeight")
     Settings.galleryWidth, Settings.galleryHeight = savedInteger("galleryWidth"), savedInteger("galleryHeight")
@@ -50,9 +64,10 @@ end
 
 -- Written when the plugin shuts down (the settings are only kept in memory until then).
 function Settings.save()
+    PersistentDB:SetString("npcName", Settings.chosenNpcID and GameIds.nameOf("NPC", Settings.chosenNpcID) or "")
     PersistentDB:SetInt("npcID", Settings.chosenNpcID or -1)
     PersistentDB:SetInt("animID", Settings.lastSeenNpcAnimationID or -1)
-    PersistentDB:SetInt("animOverride", Settings.chosenAnimationID or -1)
+    PersistentDB:SetString("animName", Settings.chosenAnimationID and Animations.nameOf(Settings.chosenAnimationID) or "")
     PersistentDB:SetInt("headViewDistance", Settings.headViewDistance)
     PersistentDB:SetInt("variantsWidth", Settings.variantsWidth or -1)
     PersistentDB:SetInt("variantsHeight", Settings.variantsHeight or -1)
