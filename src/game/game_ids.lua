@@ -1,6 +1,6 @@
--- The ids of the game's configs (animations, NPCs) from their names in the game (id.Seq, id.NPC). Ids can differ
--- between game builds and between the dev worlds and the live game; the names do not, so the plugin's data holds
--- names and turns them into ids here, once, when the data is loaded.
+-- The ids of the game's configs (animations, NPCs, interfaces, components, variables) from their names in the game
+-- (id.Seq, id.NPC, id.Interface, id.Component, var.VarPlayer). Ids can differ between game builds and between the dev
+-- worlds and the live game; the names do not, so the plugin holds names and turns them into ids here, once, at load.
 
 local GameIds = {}
 
@@ -12,8 +12,8 @@ local function lookUp(kind, name)
     return id[kind][name]
 end
 
--- The id of the config of this kind ("Seq" or "NPC") with this name, or nil if this game build has none by that name
--- (renamed or removed: the entry is left out).
+-- The id of the config of this kind ("Seq", "NPC", "Interface" or "Component") with this name, or nil if this game
+-- build has none by that name (renamed or removed: the entry is left out).
 function GameIds.resolve(kind, name)
     local known = idByName[kind]
     if known == nil then
@@ -30,6 +30,17 @@ function GameIds.resolve(kind, name)
     end
     known[name], nameByID[kind][value] = value, name
     return value
+end
+
+-- The id of the player variable with this name, or nil if this game build has none by that name. (An unknown name in
+-- the var table reads as nil.)
+function GameIds.playerVariable(name)
+    local variable = var.VarPlayer[name]
+    if variable == nil then
+        GameIds.unresolved[#GameIds.unresolved + 1] = "VarPlayer." .. name
+        return nil
+    end
+    return variable.id
 end
 
 -- The name of a config resolved before (by GameIds.resolve), or nil.

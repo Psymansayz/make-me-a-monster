@@ -386,12 +386,12 @@ end
 -- Nothing of the plugin's runs every frame: the dialogue boxes are watched on the server's ticks while in the game
 -- (HeadSwap), and the windows act on their buttons and boxes.
 Event.GameStateChanged.Subscribe("make_me_a_monster_state", function(event)
-    if event.newState == 30 then
+    if event.newState == GameState.GAME then
         Settings.load()
         HeadSwap.start()
         refreshAnimationDropdown()
         refreshStatusTexts()
-    elseif event.oldState == 30 then
+    elseif event.oldState == GameState.GAME then
         HeadSwap.reset()
     end
 end)
