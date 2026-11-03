@@ -1944,7 +1944,7 @@ return {
         { name = "Sliske", members = { { "Sliske", { "MAH5_WAVE_SLISKE", "MAH5_WAVE_SLISKE_SKIN", "TSD_SLISKE", "TPR_SLISKE", "GWD2_MINIQUEST_SLISKE" } }, { "Follower of Sliske", { "_6AWE2_EVENT_SLISKE_FOLLOWER_1", "_6AWE2_EVENT_SLISKE_FOLLOWER_2", "_6AWE2_EVENT_SLISKE_FOLLOWER_3", "_6AWE2_EVENT_SLISKE_FOLLOWER_4" } } } },
         { name = "Azzandra", members = { { "Azzandra", { "MAH5_WAVE_AZZANDRA_SKIN" } } } },
         { name = "Sir Tendeth", members = { { "Sir Tendeth", { "MAH5_SIR_TENDETH" } } } },
-        { name = "Bilrach", members = { { "Bilrach", { "MAH5_BILRACH", "FREMSAGA_NPC_BILRACH", "FOTG2_BILRACH_SKELE" } } } },
+        { name = "Bilrach", members = { { "Bilrach", { "MAH5_BILRACH", "FOTG2_BILRACH_SKELE" } } } },
         { name = "Ophelia", members = { { "Ophelia", { "CLAN_NPC_THEATRE_VENDOR" } } } },
         { name = "Snotgut", members = { { "Snotgut", { "AGIDAD_GOBLIN", "AGIDAD_GOBLIN_READING" } } } },
         { name = "Scrambles", members = { { "Scrambles", { "AGIDAD_WEREWOLF_NOMASK", "AGIDAD_WEREWOLF_MASK" } } } },

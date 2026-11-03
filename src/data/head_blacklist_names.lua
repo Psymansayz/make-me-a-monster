@@ -3682,5 +3682,6 @@ return {
         [7497]="Golem guard", [7498]="Golems remains", [21083]="Golden loot beam",
         [16895]="Akthanakos",
         [16894]="Enakhra",
+        [15363]="Bilrach",
     },
 }
