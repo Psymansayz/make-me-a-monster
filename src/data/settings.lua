@@ -32,7 +32,7 @@ local function savedInteger(settingKey)
 end
 
 -- The NPC whose head was chosen, or nil. Saved by name, and by id for a head whose name is not known yet (one saved by
--- version 1.0.0, and not chosen again before the plugin's page was opened); "" with -1 for none.
+-- id only, and not chosen again before the plugin's page was opened); "" with -1 for none.
 local function savedNpc()
     local npcName = PersistentDB:GetString("npcName")
     if npcName ~= nil and npcName ~= "" then return GameIds.resolve("NPC", npcName) end
@@ -44,7 +44,7 @@ end
 local function savedAnimation()
     local animationName = PersistentDB:GetString("animName")
     if animationName ~= nil then return animationName ~= "" and Animations.idOf(animationName) or nil end
-    -- (saved by its id before version 1.1.0; -1 for the default animation)
+    -- (saved by its id by an earlier build; -1 for the default animation)
     local savedID = PersistentDB:GetInt("animOverride")
     if savedID ~= nil then return Animations.isListed(savedID) and savedID or nil end
     -- Nothing saved at all: evil laugh, the player's or the NPC's kind by the head in use.
