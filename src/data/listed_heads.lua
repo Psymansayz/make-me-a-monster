@@ -991,7 +991,7 @@ return {
         { name = "Pentyn", members = { { "Pentyn", { "ENAKH_PENTYN" } } } },
         { name = "Boneguard", members = { { "Boneguard", { "ENAKH_BONEGUARD", "ENAKH_AKTHANAKOS_BONEGUARD" } } } },
         { name = "Enakhra", members = { { "Enakhra", { "ENAKH_ENAKHRA_HOODED", "ENAKH_ENAKHRA_MAHJARRAT", "ENAKH_CUTSCENE_ENAKHRA", "MAH5_WAVE_ENAKHRA", "MAH5_WAVE_ENAKHRA_SKIN" } } } },
-        { name = "Akthanakos", members = { { "Akthanakos", { "ENAKH_AKTHANAKOS_FREED", "ENAKH_AKTHANAKOS_MAHJARRAT", "ENAKH_CUTSCENE_AKTHANAKOS", "MAH5_WAVE_AKTHANAKOS", "MAH5_WAVE_AKTHANAKOS_SKIN" } } } },
+        { name = "Akthanakos", members = { { "Akthanakos", { "ENAKH_AKTHANAKOS_FREED", "ENAKH_CUTSCENE_AKTHANAKOS", "MAH5_WAVE_AKTHANAKOS", "MAH5_WAVE_AKTHANAKOS_SKIN" } } } },
         { name = "Lazim", members = { { "Lazim", { "ENAKH_LAZIM" } } } },
         { name = "Charley", members = { { "Charley", { "FEVER_PIRATE_TWO_FEET_CHARLEY" } } } },
         { name = "Mama", members = { { "Mama", { "FEVER_MAMA_LA_FIETTE" } } } },
