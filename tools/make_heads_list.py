@@ -3,6 +3,8 @@
 To make the list again (new NPCs, new blacklisted heads, changed merging rules): move src/data/listed_heads.lua away,
 reload the plugin (prl make_me_a_monster), open its page, wait until "HEADS|end" is logged, paste the console
 lines into a text file and run:  python tools/make_heads_list.py <that file>
+The scan also logs the NPCNAMES| lines: run  python tools/name_listed_heads.py <that file>  next, which puts the
+NPCs' names in the game in place of the ids (the plugin loads names).
 """
 import os
 import re

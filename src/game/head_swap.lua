@@ -6,7 +6,6 @@
 
 local Animations = require("src/game/animations")
 local Settings = require("src/data/settings")
-local AnimationList = require("src/data/animation_list")
 
 local HeadSwap = {}
 
@@ -29,14 +28,14 @@ local PLAYER_HEAD_MODEL_TYPE = 3 -- ui.ModelType values
 local NPC_HEAD_MODEL_TYPE = 2
 
 -- The listed animation that has each player animation as its twin (the lowest id if several), made once from
--- AnimationList.twin and AnimationList.alsoFor. (The player's head animations don't play on an NPC's head, their NPC
+-- Animations.twin and Animations.alsoFor. (The player's head animations don't play on an NPC's head, their NPC
 -- versions do.)
 local npcVersionOfPlayerAnimation = {}
-for npcAnimation, playerAnimation in pairs(AnimationList.twin) do
+for npcAnimation, playerAnimation in pairs(Animations.twin) do
     local lowestSoFar = npcVersionOfPlayerAnimation[playerAnimation]
     if lowestSoFar == nil or npcAnimation < lowestSoFar then npcVersionOfPlayerAnimation[playerAnimation] = npcAnimation end
 end
-for playerAnimation, npcAnimation in pairs(AnimationList.alsoFor) do
+for playerAnimation, npcAnimation in pairs(Animations.alsoFor) do
     npcVersionOfPlayerAnimation[playerAnimation] = npcAnimation
 end
 
@@ -54,10 +53,10 @@ function HeadSwap.npcHeadAnimation(npcID, playerAnimationOfLine)
     if Animations.isOnPlayerRig(npcID) then
         if chosenAnimation ~= nil then return HeadSwap.animationForHead(chosenAnimation, true) end
         if playerAnimationOfLine ~= nil and playerAnimationOfLine >= 0 then return playerAnimationOfLine end
-        return AnimationList.neutral
+        return Animations.neutral
     end
     if chosenAnimation ~= nil then return HeadSwap.animationForHead(chosenAnimation, false) end
-    return npcVersionOfGameAnimation or Settings.lastSeenNpcAnimationID or AnimationList.npcFallback
+    return npcVersionOfGameAnimation or Settings.lastSeenNpcAnimationID or Animations.npcFallback
 end
 
 -- The animation the player's own head plays for the animation chosen (which may be one for an NPC's head): its
@@ -65,7 +64,7 @@ end
 -- the neutral one if asked for (withNeutral, for a head shown outside dialogue), else nil.
 function HeadSwap.playerHeadAnimation(withNeutral)
     local chosenAnimation = Settings.chosenAnimationID
-    if chosenAnimation == nil then return withNeutral and AnimationList.neutral or nil end
+    if chosenAnimation == nil then return withNeutral and Animations.neutral or nil end
     -- (never an NPC animation: it is changed to the player's version)
     return HeadSwap.animationForHead(chosenAnimation, true)
 end
@@ -78,10 +77,10 @@ function HeadSwap.animationForHead(animationID, forPlayerHead)
     local isPlayerAnimation = Animations.isPlayerAnimation(animationID)
     if forPlayerHead then
         if isPlayerAnimation then return animationID end
-        return AnimationList.twin[animationID] or AnimationList.fallback
+        return Animations.twin[animationID] or Animations.fallback
     end
     if not isPlayerAnimation then return animationID end
-    return npcVersionOfPlayerAnimation[animationID] or npcVersionOfPlayerAnimation[AnimationList.fallback]
+    return npcVersionOfPlayerAnimation[animationID] or npcVersionOfPlayerAnimation[Animations.fallback]
 end
 
 -- The NPC head with this id, in this component, given the animation it should play (playerAnimationOfLine: the

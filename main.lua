@@ -7,6 +7,7 @@ local HeadSwap = require("src/game/head_swap")
 local VariantsWindow = require("src/ui/variants_window")
 local AllHeadsWindow = require("src/ui/all_heads_window")
 local Animations = require("src/game/animations")
+local GameIds = require("src/game/game_ids")
 
 local PrettyUI = prettyui
 
@@ -14,6 +15,11 @@ local PrettyUI = prettyui
 -- blacklist. A button for it is added to the plugin page. Remove DEBUG_HEAD_BROWSER and what uses it when done.
 local DEBUG_HEAD_BROWSER = true
 local HeadFlaggingWindow = require("src/debug/head_flagging_window")
+
+-- Development: names in the plugin's data that this game build does not know (renamed or removed: left out).
+if #GameIds.unresolved > 0 then
+    print("[make_me_a_monster] UNRESOLVED|" .. table.concat(GameIds.unresolved, " "))
+end
 
 -- The ids of an NPC group worth showing. With the saved list (src/data/listed_heads.lua) they are all its ids. Without it
 -- (development: the file is made from a scan, see finalizeGroups) they are worked out once per group by
@@ -269,6 +275,7 @@ local openHeadFlaggingWindow -- (below, debug only)
 local openBlacklistedHeadsWindow -- (below, debug only)
 local openNewestHeadsWindow -- (below, debug only)
 local logListedHeadModels -- (below, debug only)
+local logListedHeadNames -- (below, debug only)
 
 -- chosenFrom: "dropdown" or "variants" when the choice came from the NPC dropdown or the variants window (which then
 -- already show it), else nil.
@@ -356,6 +363,7 @@ local function buildPage(pluginLayer)
         pageView:AddSimpleButton("Debug: blacklisted heads with the player's animations", function() openBlacklistedHeadsWindow() end)
         pageView:AddSimpleButton("Debug: listed heads, newest models first", function() openNewestHeadsWindow() end)
         pageView:AddSimpleButton("Debug: log the listed heads' names and models", function() logListedHeadModels() end)
+        pageView:AddSimpleButton("Debug: log the listed heads' game names (id.NPC)", function() logListedHeadNames() end)
     end
     pageControls.noticeText = pageView:AddText("")
     pageControls.headSizeText = pageView:AddText("Head size: " .. Settings.headSizePercent() .. "%")
@@ -425,6 +433,7 @@ local function finalizeGroups()
             print(("[make_me_a_monster] HEADS|begin|%d entries, %d heads, %d lines"):format(#NpcDirectory.groups, heads, #lines))
             for _, line in ipairs(lines) do print(line) end
             print("[make_me_a_monster] HEADS|end")
+            logListedHeadNames()
             refreshNpcDropdown()
             refreshStatusTexts()
             finalState.done = true
@@ -496,7 +505,6 @@ local ANIMATION_HEAD = 0
 local ANIMATION_ENTRIES_PER_LINE = 12
 local AnimationScan = require("src/debug/animation_scan")
 local Whitelist = require("src/data/animation_whitelist")
-local AnimationList = require("src/data/animation_list")
 local animationBrowserWanted = false
 
 local TINT_LISTED = { 0.10, 0.28, 0.12, 1 }     -- on the whitelist, listed in the dropdown
@@ -508,7 +516,7 @@ local function showAnimationBrowser()
     end)
     if not (succeeded and pluginLayer ~= nil) then return false end
     local variantIDs, names, listed, duplicates = {}, {}, {}, {}
-    for _, entry in ipairs(AnimationList.npc) do listed[entry.id] = true end
+    for _, entry in ipairs(Animations.options(false)) do listed[entry.id] = true end
     for _, animID in ipairs(Whitelist.duplicates or {}) do duplicates[animID] = true end
     for _, anim in ipairs(AnimationScan.list) do
         variantIDs[#variantIDs + 1] = anim.id
@@ -565,12 +573,12 @@ end
 -- The player's version of the animation chosen now (else the player's evil laugh): what the debug windows' heads play,
 -- worked out at every fill so the heads follow the dropdown.
 local function playerVersionOfChosenAnimation()
-    return HeadSwap.animationForHead(Settings.chosenAnimationID or AnimationList.fallback, true)
+    return HeadSwap.animationForHead(Settings.chosenAnimationID or Animations.fallback, true)
 end
 
 -- Debug: every blacklisted head (src/data/head_blacklist.lua: blank, identical and manual), each playing the player's
 -- version of the animation chosen (else the player's evil laugh), to find heads built on the player's rig: a head that
--- was blank with NPC animations but moves here belongs in AnimationList.headsOnPlayerRig. Clicking a head flags it;
+-- was blank with NPC animations but moves here belongs in Animations.headsOnPlayerRig. Clicking a head flags it;
 -- "Log flagged" prints the flagged ids as lines for that table. Names come from the dev-only names file.
 openBlacklistedHeadsWindow = function()
     local succeeded, pluginLayer = pcall(function()
@@ -594,7 +602,7 @@ openBlacklistedHeadsWindow = function()
         end
     end
     local playerRigIDs = {}
-    for npcID in pairs(AnimationList.headsOnPlayerRig) do
+    for npcID in pairs(Animations.headsOnPlayerRig) do
         heads[#heads + 1] = npcID
         playerRigIDs[#playerRigIDs + 1] = npcID
     end
@@ -618,7 +626,7 @@ openBlacklistedHeadsWindow = function()
         for _, member in ipairs(npcGroup.members or {}) do
             if playerRigNames[member.name] then
                 for _, npcID in ipairs(member.ids) do
-                    if not AnimationList.headsOnPlayerRig[npcID] then
+                    if not Animations.headsOnPlayerRig[npcID] then
                         print(("[make_me_a_monster] HEADDATA|%d|%s (listed)|%s"):format(npcID, member.name, HeadFilter.describeHead(npcID)))
                     end
                 end
@@ -633,9 +641,9 @@ openBlacklistedHeadsWindow = function()
             model:SetModel(ui.ModelType.NPC_HEAD, npcID)
             model.animID = playerVersionOfChosenAnimation()
         end,
-        tint = function(npcID) return AnimationList.headsOnPlayerRig[npcID] and TINT_LISTED or nil end,
+        tint = function(npcID) return Animations.headsOnPlayerRig[npcID] and TINT_LISTED or nil end,
         flaggedLines = function(selected)
-            local lines = { ("heads on the player's rig: %d (lines for AnimationList.headsOnPlayerRig)"):format(#selected) }
+            local lines = { ("heads on the player's rig: %d (lines for Animations.headsOnPlayerRig)"):format(#selected) }
             for _, npcID in ipairs(selected) do
                 lines[#lines + 1] = ("        [%d] = true, -- %s"):format(npcID, names[npcID] or "?")
             end
@@ -652,7 +660,7 @@ end
 -- Debug: every listed head, the newest models first (model ids are given out in order, so a head's highest model id
 -- tells roughly how new it is; it is shown after the name), each playing the player's version of the animation chosen
 -- (else the player's evil laugh), to find newer heads built on the player's rig among the listed ones: the ones already
--- on the rig are green. Clicking a head flags it; "Log flagged" prints lines for AnimationList.headsOnPlayerRig. (Every
+-- on the rig are green. Clicking a head flags it; "Log flagged" prints lines for Animations.headsOnPlayerRig. (Every
 -- listed head's customisation is read when the window opens: a moment's pause.)
 openNewestHeadsWindow = function()
     local succeeded, pluginLayer = pcall(function()
@@ -681,9 +689,9 @@ openNewestHeadsWindow = function()
             model:SetModel(ui.ModelType.NPC_HEAD, npcID)
             model.animID = playerVersionOfChosenAnimation()
         end,
-        tint = function(npcID) return AnimationList.headsOnPlayerRig[npcID] and TINT_LISTED or nil end,
+        tint = function(npcID) return Animations.headsOnPlayerRig[npcID] and TINT_LISTED or nil end,
         flaggedLines = function(selected)
-            local lines = { ("heads on the player's rig: %d (lines for AnimationList.headsOnPlayerRig)"):format(#selected) }
+            local lines = { ("heads on the player's rig: %d (lines for Animations.headsOnPlayerRig)"):format(#selected) }
             for _, npcID in ipairs(selected) do
                 lines[#lines + 1] = ("        [%d] = true, -- %s"):format(npcID, NpcDirectory.nameOfNpc(npcID) or "?")
             end
@@ -720,6 +728,50 @@ logListedHeadModels = function()
     end
     print("[make_me_a_monster] MODELS|end")
     if pluginPage then pluginPage.noticeText.content = "Logged: paste the console and run tools/make_heads_models.py" end
+end
+
+-- Debug: every listed head's name in the game (its configName), checked against id.NPC (the name must give the same id
+-- back), and the animation names id.Seq did not know. Logged packed several to a line: NPCNAMES|begin|..., NPCNAMES|i/n|
+-- id=NAME~id=NAME..., NPCNAMES|end|<problems>. A head whose name is missing or does not give its id back is logged as
+-- id=!NAME. tools/name_listed_heads.py turns the pasted console into the names in src/data/listed_heads.lua.
+local NAMES_PER_LINE = 20
+
+logListedHeadNames = function()
+    if not NpcDirectory.regrouped then
+        if pluginPage then pluginPage.noticeText.content = "The NPCs are still being read." end
+        return
+    end
+    local npcIDs, isLogged = {}, {}
+    for _, npcID in ipairs(NpcDirectory.headsInNameOrder(visibleIds)) do
+        npcIDs[#npcIDs + 1], isLogged[npcID] = npcID, true
+    end
+    for npcID in pairs(Animations.headsOnPlayerRig) do
+        if not isLogged[npcID] then npcIDs[#npcIDs + 1] = npcID end
+    end
+    local records, problems = {}, 0
+    for _, npcID in ipairs(npcIDs) do
+        local named, configName = pcall(function() return config.NPC.FromID(npcID).configName end)
+        configName = named and configName or ""
+        local givesID, idBack = pcall(function() return id.NPC[configName] end)
+        local good = configName ~= "" and givesID and idBack == npcID
+        if not good then problems = problems + 1 end
+        records[#records + 1] = ("%d=%s%s"):format(npcID, good and "" or "!", configName)
+    end
+    local unknownRead, unknownValue = pcall(function() return id.NPC.MAKE_ME_A_MONSTER_NO_SUCH_NPC end)
+    print(("[make_me_a_monster] NPCNAMES|unknown name check: %s, %s"):format(tostring(unknownRead), tostring(unknownValue)))
+    print(("[make_me_a_monster] NPCNAMES|animation names id.Seq did not know: %d %s"):format(#GameIds.unresolved,
+        table.concat(GameIds.unresolved, " ")))
+    local lineCount = math.ceil(#records / NAMES_PER_LINE)
+    print(("[make_me_a_monster] NPCNAMES|begin|%d heads, %d lines"):format(#records, lineCount))
+    for index = 1, lineCount do
+        local first = (index - 1) * NAMES_PER_LINE
+        print(("[make_me_a_monster] NPCNAMES|%d/%d|%s"):format(index, lineCount,
+            table.concat(records, "~", first + 1, math.min(#records, first + NAMES_PER_LINE))))
+    end
+    print(("[make_me_a_monster] NPCNAMES|end|%d problems"):format(problems))
+    if pluginPage then
+        pluginPage.noticeText.content = ("Logged (%d problems): paste the console and run tools/name_listed_heads.py"):format(problems)
+    end
 end
 
 local frames = 0
