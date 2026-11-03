@@ -1,7 +1,7 @@
 """Development tool: makes src/data/listed_heads_models.lua (dev branch only) from the MODELS| lines the plugin logs.
 
-The file records, for every listed NPC id, its name and its head's model ids, so that after a game update that shifts
-ids the new ids can be matched to these. To make it: on the dev branch, reload the plugin, open its page, press
+The file records, for every listed NPC id, its name, its head's model ids and its constant (id.NPC), so that after a
+game update that shifts ids the new ids can be matched to these. To make it: on the dev branch, reload the plugin, open its page, press
 "Debug: log the listed heads' names and models", paste the console into a text file and run:
     python tools/make_heads_models.py <that file>
 The console keeps only about a thousand lines and shows the newest first: the tool checks every line is there.
@@ -30,8 +30,9 @@ heads = {}
 for i in range(1, total + 1):
     for record in lines[i].split("~"):
         npc_id, rest = record.split("=", 1)
+        rest, constant = rest.rsplit("@", 1)
         name, models = rest.rsplit(":", 1)
-        heads[int(npc_id)] = (name, [int(x) for x in models.split(",") if x])
+        heads[int(npc_id)] = (name, [int(x) for x in models.split(",") if x], constant)
 if header and header[0] != len(heads):
     sys.exit(f"counts differ: log says {header[0]} heads, parsed {len(heads)}")
 
@@ -40,14 +41,14 @@ def q(text):
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-out = ["-- DEVELOPMENT ONLY (dev branch): for every listed NPC id, its name and its head's model ids, as the game gave them",
-       "-- when this file was made (tools/make_heads_models.py, from the plugin's MODELS| log). The plugin never reads this:",
-       "-- if a game update shifts NPC ids, matching these names and model ids against the new ones shows where each listed",
-       "-- id moved to. { [npc id] = { name, { model id... } } }.",
+out = ["-- DEVELOPMENT ONLY (dev branch): for every listed NPC id, its name, its head's model ids and its constant (id.NPC), as",
+       "-- the game gave them when this file was made (tools/make_heads_models.py, from the plugin's MODELS| log). The plugin",
+       "-- never reads this: if a game update shifts NPC ids, the constants, names and model ids show where each listed id",
+       "-- moved to. { [npc id] = { name, { model id... }, constant } }.",
        "return {"]
 for npc_id in sorted(heads):
-    name, models = heads[npc_id]
-    out.append("    [%d] = { %s, { %s } }," % (npc_id, q(name), ", ".join(map(str, models))))
+    name, models, constant = heads[npc_id]
+    out.append("    [%d] = { %s, { %s }, %s }," % (npc_id, q(name), ", ".join(map(str, models)), q(constant)))
 out += ["}", ""]
 path = os.path.join(root, "src", "data", "listed_heads_models.lua")
 open(path, "w", encoding="utf8").write("\n".join(out))

@@ -276,6 +276,7 @@ local openBlacklistedHeadsWindow -- (below, debug only)
 local openNewestHeadsWindow -- (below, debug only)
 local logListedHeadModels -- (below, debug only)
 local logListedHeadNames -- (below, debug only)
+local logBlacklistConstants -- (below, debug only)
 
 -- Development: an NPC's name in the game (what the plugin's data holds), or "?".
 local function configNameOf(npcID)
@@ -370,6 +371,7 @@ local function buildPage(pluginLayer)
         pageView:AddSimpleButton("Debug: listed heads, newest models first", function() openNewestHeadsWindow() end)
         pageView:AddSimpleButton("Debug: log the listed heads' names and models", function() logListedHeadModels() end)
         pageView:AddSimpleButton("Debug: log the listed heads' game names (id.NPC)", function() logListedHeadNames() end)
+        pageView:AddSimpleButton("Debug: log the blacklisted heads' constants (next page)", function() logBlacklistConstants() end)
     end
     pageControls.noticeText = pageView:AddText("")
     pageControls.headSizeText = pageView:AddText("Head size: " .. Settings.headSizePercent() .. "%")
@@ -507,7 +509,7 @@ end
 -- and logs it; "Log flagged" prints every selected animation as id=name, for adding to or taking off the
 -- whitelist (src/data/animation_whitelist.lua). The search box narrows the list by name or id, for example to
 -- "chat". Reading every animation takes a few seconds the first time (src/debug/animation_scan.lua).
-local ANIMATION_HEAD = 0
+local ANIMATION_HEAD = id.NPC.HANS
 local ANIMATION_ENTRIES_PER_LINE = 12
 local AnimationScan = require("src/debug/animation_scan")
 local Whitelist = require("src/data/animation_whitelist")
@@ -709,10 +711,10 @@ openNewestHeadsWindow = function()
 end
 
 -- Debug: every listed head's name and model ids logged, packed several to a line (the console keeps about a thousand
--- lines): MODELS|begin|..., MODELS|i/n|id=name:model,model~id=name:model..., MODELS|end. tools/make_heads_models.py turns
+-- lines): MODELS|begin|..., MODELS|i/n|id=name:model,model@CONSTANT~..., MODELS|end. tools/make_heads_models.py turns
 -- the pasted console into src/data/listed_heads_models.lua, the dev-only record for finding where ids moved after a
 -- game update.
-local MODELS_PER_LINE = 12
+local MODELS_PER_LINE = 10
 
 logListedHeadModels = function()
     if not NpcDirectory.regrouped then
@@ -723,8 +725,8 @@ logListedHeadModels = function()
     local heads = NpcDirectory.headsInNameOrder(visibleIds)
     local records = {}
     for _, npcID in ipairs(heads) do
-        records[#records + 1] = ("%d=%s:%s"):format(npcID, NpcDirectory.nameOfNpc(npcID) or "?",
-            table.concat(HeadFilter.headModels(npcID), ","))
+        records[#records + 1] = ("%d=%s:%s@%s"):format(npcID, NpcDirectory.nameOfNpc(npcID) or "?",
+            table.concat(HeadFilter.headModels(npcID), ","), configNameOf(npcID))
     end
     local lineCount = math.ceil(#records / MODELS_PER_LINE)
     print(("[make_me_a_monster] MODELS|begin|%d heads, %d lines"):format(#records, lineCount))
@@ -779,6 +781,46 @@ logListedHeadNames = function()
     if pluginPage then
         pluginPage.noticeText.content = ("Logged (%d problems): paste the console and run tools/name_listed_heads.py"):format(problems)
     end
+end
+
+-- Debug: every blacklisted head's constant, for src/data/head_blacklist_constants.lua (tools/make_blacklist_constants.py).
+-- There are more than the console keeps (about a thousand lines), so each press logs the next page:
+-- BLACKCONST|i/n|id=NAME~id=NAME..., a name that does not give its id back (id.NPC) as id=!NAME.
+local BLACKLIST_LINE_LENGTH, BLACKLIST_LINES_PER_PAGE = 860, 700
+local blacklistLines, blacklistNextLine = nil, 1
+
+logBlacklistConstants = function()
+    if blacklistLines == nil then
+        local Blacklist = require("src/data/head_blacklist")
+        local npcIDs = {}
+        for _, groupName in ipairs({ "blank", "identical", "manual" }) do
+            for _, npcID in ipairs(Blacklist[groupName]) do npcIDs[#npcIDs + 1] = npcID end
+        end
+        table.sort(npcIDs)
+        blacklistLines = {}
+        local current, length = {}, 0
+        for _, npcID in ipairs(npcIDs) do
+            local constant = configNameOf(npcID)
+            local givesID, idBack = pcall(function() return id.NPC[constant] end)
+            local record = ("%d=%s%s"):format(npcID, (givesID and idBack == npcID) and "" or "!", constant)
+            if length + #record + 1 > BLACKLIST_LINE_LENGTH then
+                blacklistLines[#blacklistLines + 1] = table.concat(current, "~")
+                current, length = {}, 0
+            end
+            current[#current + 1], length = record, length + #record + 1
+        end
+        if #current > 0 then blacklistLines[#blacklistLines + 1] = table.concat(current, "~") end
+    end
+    local lastLine = math.min(#blacklistLines, blacklistNextLine + BLACKLIST_LINES_PER_PAGE - 1)
+    for index = blacklistNextLine, lastLine do
+        print(("[make_me_a_monster] BLACKCONST|%d/%d|%s"):format(index, #blacklistLines, blacklistLines[index]))
+    end
+    local finished = lastLine >= #blacklistLines
+    if pluginPage then
+        pluginPage.noticeText.content = finished and "All logged: run tools/make_blacklist_constants.py"
+            or ("Logged lines up to %d of %d: paste them, then press again"):format(lastLine, #blacklistLines)
+    end
+    blacklistNextLine = finished and 1 or lastLine + 1
 end
 
 local frames = 0
