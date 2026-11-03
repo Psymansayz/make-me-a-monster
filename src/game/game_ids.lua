@@ -22,9 +22,9 @@ function GameIds.resolve(kind, name)
     end
     local configID = known[name]
     if configID ~= nil then return configID end
-    -- (the game's id table, outside the plugin: an unknown name may read as nil or raise an error)
+    -- (the game's id table, outside the plugin: an unknown name reads as -1, in the dev client of 2026-11-03)
     local found, value = pcall(lookUp, kind, name)
-    if not found or value == nil then
+    if not found or value == nil or value < 0 then
         GameIds.unresolved[#GameIds.unresolved + 1] = kind .. "." .. name
         return nil
     end

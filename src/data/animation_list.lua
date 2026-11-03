@@ -138,10 +138,24 @@ return {
     -- The same for an NPC head.
     npcFallback = "HUMAN_UPDATE_CHATHEAD_EVIL_LAUGH_LEN_ALL",
     -- NPC heads built on the player's rig (newer models), which play the player's animations and not the NPC ones:
-    -- { [npc id] = true }, listed heads only (found with the dev debug window on the blacklisted heads).
+    -- their names in the game (id.NPC), listed heads only (found with the dev debug window on the blacklisted heads).
     headsOnPlayerRig = {
-        [11701] = true, [11702] = true, [12166] = true, [17208] = true, [28050] = true, [28052] = true,
-        [28228] = true, [28445] = true, [28467] = true, [30099] = true, [30901] = true, [30902] = true,
-        [30903] = true, [31406] = true, [31432] = true, [32506] = true, [32679] = true,
+        "MAKEOVER_MAGE_NPC_MALE",
+        "MAKEOVER_MAGE_NPC_FEMALE",
+        "QUEST_WENDLE_SANGUINE_ANYA_POSTQUEST",
+        "XMAS2014_SNOWMAN_BOSS",
+        "EGWD_INFIRMARY_SOLDIER_WOUNDED",
+        "EGWD_INFIRMARY_SOLDIER_WOUNDED_V3",
+        "EGWD_INFIRMARY_SOLDIER_WOUNDED_IORWERTH",
+        "EGWD_CITY_RAPTOR",
+        "RUNEPASS_LORE_HOST",
+        "QUEST_FORT_RAPTOR_RAPTOR_DREAM_COMBAT",
+        "QUEST_VORKATH_ZAMORAKIAN_SCOUT_1A",
+        "QUEST_VORKATH_ZAMORAKIAN_SCOUT_1B",
+        "QUEST_VORKATH_TRANSLATOR_SCOUT",
+        "GROUP_IRONMAN_TUTOR",
+        "TRH148_RETRO_TORVA_NPC",
+        "BPETS_SNOWVERLOAD",
+        "QUEST_WENDLE_SANGUINE_ANYA_ENRAGED",
     },
 }

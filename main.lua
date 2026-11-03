@@ -277,6 +277,12 @@ local openNewestHeadsWindow -- (below, debug only)
 local logListedHeadModels -- (below, debug only)
 local logListedHeadNames -- (below, debug only)
 
+-- Development: an NPC's name in the game (what the plugin's data holds), or "?".
+local function configNameOf(npcID)
+    local named, configName = pcall(function() return config.NPC.FromID(npcID).configName end)
+    return named and configName or "?"
+end
+
 -- chosenFrom: "dropdown" or "variants" when the choice came from the NPC dropdown or the variants window (which then
 -- already show it), else nil.
 local function chooseNpc(npcID, chosenFrom)
@@ -645,7 +651,7 @@ openBlacklistedHeadsWindow = function()
         flaggedLines = function(selected)
             local lines = { ("heads on the player's rig: %d (lines for Animations.headsOnPlayerRig)"):format(#selected) }
             for _, npcID in ipairs(selected) do
-                lines[#lines + 1] = ("        [%d] = true, -- %s"):format(npcID, names[npcID] or "?")
+                lines[#lines + 1] = ("        \"%s\", -- %d %s"):format(configNameOf(npcID), npcID, names[npcID] or "?")
             end
             -- (and each head's customisation data, for telling the look-alikes apart: HEADDATA|id|name|fields)
             for _, npcID in ipairs(selected) do
@@ -693,7 +699,8 @@ openNewestHeadsWindow = function()
         flaggedLines = function(selected)
             local lines = { ("heads on the player's rig: %d (lines for Animations.headsOnPlayerRig)"):format(#selected) }
             for _, npcID in ipairs(selected) do
-                lines[#lines + 1] = ("        [%d] = true, -- %s"):format(npcID, NpcDirectory.nameOfNpc(npcID) or "?")
+                lines[#lines + 1] = ("        \"%s\", -- %d %s"):format(configNameOf(npcID), npcID,
+                    NpcDirectory.nameOfNpc(npcID) or "?")
             end
             return lines
         end,

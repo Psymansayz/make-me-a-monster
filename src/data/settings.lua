@@ -1,9 +1,10 @@
 -- The settings, saved in PersistentDB (shared by every character on this PC), each as an integer entry under its
 -- own key. An entry that isn't there reads as nil, which is the default; a setting with nothing chosen is saved as -1.
--- The animation chosen is saved by its name in the game (ids can differ between game builds).
+-- The head and the animation chosen are saved by their names in the game too (ids can differ between game builds).
 -- The fields are set directly; only the head size has a setter (it works out the view distance).
 
 local Animations = require("src/game/animations")
+local GameIds = require("src/game/game_ids")
 
 local Settings = {}
 
@@ -30,6 +31,14 @@ local function savedInteger(settingKey)
     return savedValue ~= nil and savedValue >= 0 and savedValue or nil
 end
 
+-- The NPC whose head was chosen, or nil. Saved by name, and by id for a head whose name is not known yet (one saved by
+-- version 1.0.0, and not chosen again before the plugin's page was opened); "" with -1 for none.
+local function savedNpc()
+    local npcName = PersistentDB:GetString("npcName")
+    if npcName ~= nil and npcName ~= "" then return GameIds.resolve("NPC", npcName) end
+    return savedInteger("npcID")
+end
+
 -- The animation chosen, or nil for the default one. Saved as "": the player chose the default animation; a name this
 -- game build does not list reads as the default too.
 local function savedAnimation()
@@ -43,7 +52,7 @@ local function savedAnimation()
 end
 
 function Settings.load()
-    Settings.chosenNpcID = savedInteger("npcID")
+    Settings.chosenNpcID = savedNpc()
     Settings.lastSeenNpcAnimationID = savedInteger("animID")
     Settings.chosenAnimationID = savedAnimation()
     Settings.headViewDistance = savedInteger("headViewDistance") or Settings.DEFAULT_HEAD_VIEW_DISTANCE
@@ -55,6 +64,7 @@ end
 
 -- Written when the plugin shuts down (the settings are only kept in memory until then).
 function Settings.save()
+    PersistentDB:SetString("npcName", Settings.chosenNpcID and GameIds.nameOf("NPC", Settings.chosenNpcID) or "")
     PersistentDB:SetInt("npcID", Settings.chosenNpcID or -1)
     PersistentDB:SetInt("animID", Settings.lastSeenNpcAnimationID or -1)
     PersistentDB:SetString("animName", Settings.chosenAnimationID and Animations.nameOf(Settings.chosenAnimationID) or "")

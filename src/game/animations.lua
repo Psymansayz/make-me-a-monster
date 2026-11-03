@@ -42,7 +42,11 @@ Animations.fallback = seqID(AnimationList.fallback)
 Animations.npcFallback = seqID(AnimationList.npcFallback)
 
 -- The NPC heads built on the player's rig: { [npc id] = true }.
-Animations.headsOnPlayerRig = AnimationList.headsOnPlayerRig
+Animations.headsOnPlayerRig = {}
+for _, npcName in ipairs(AnimationList.headsOnPlayerRig) do
+    local npcID = GameIds.resolve("NPC", npcName)
+    if npcID ~= nil then Animations.headsOnPlayerRig[npcID] = true end
+end
 
 -- Whether the animation with this id is listed.
 function Animations.isListed(animationID)
