@@ -3683,5 +3683,6 @@ return {
         [16895]="Akthanakos",
         [16894]="Enakhra",
         [15363]="Bilrach",
+        [3142]="Akthanakos",
     },
 }
