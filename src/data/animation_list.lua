@@ -1,8 +1,5 @@
--- The animations the plugin lists, by their names in the game (id.Seq), so that a game build that numbers them
--- differently still finds them: { name, label } for the NPC heads' animations (npc) and the player's own head's
--- (player), in the order of the dropdown. Read by src/game/animations.lua, which turns the names into ids once, at
--- load. A new animation is added here, in its place in the order, once it has been checked to work. After the
--- lists: how the two kinds of animation go with each other.
+-- The animations the plugin lists. Old NPCs and the new-model player heads have different animations.
+-- It is possible other groups of NPCs have different animations as well, but that is not currently implemented.
 return {
     npc = {
         { name = "HUMAN_UPDATE_CHATHEAD_ANGRY_EXTREME_LEN1", label = "ANGRY EXTREME" },
@@ -124,9 +121,7 @@ return {
         HUMAN_UPDATE_CHATHEAD_DISGUST_NORMAL_LEN1 = "HUMAN_ACTOR_CHATHEAD_DISGUSTED_STANDARD",
         HUMAN_UPDATE_CHATHEAD_DISGUST_EXTREME_LEN1 = "HUMAN_ACTOR_CHATHEAD_DISGUSTED_EXTREME",
     },
-    -- Player animations that also stand for a listed animation (when switching back to an NPC's head), though
-    -- another player animation is its twin: { [player animation] = listed animation }. The mind read for the
-    -- eyeglo mind meld, whose twin is the gnome mind meld.
+    -- Player animations that also stand for a listed animation (switching back to an NPC's head), but aren't its twin.
     alsoFor = {
         HUMAN_ACTOR_CHATHEAD_MIND_READ_STANDARD = "EYEGLO_MIND_MELD_CHAT",
     },
@@ -137,8 +132,7 @@ return {
     fallback = "HUMAN_ACTOR_CHATHEAD_EVIL_LAUGH_STANDARD",
     -- The same for an NPC head.
     npcFallback = "HUMAN_UPDATE_CHATHEAD_EVIL_LAUGH_LEN_ALL",
-    -- NPC heads built on the player's rig (newer models), which play the player's animations and not the NPC ones:
-    -- their names in the game (id.NPC), listed heads only (found with the dev debug window on the blacklisted heads).
+    -- NPC heads built on the player's rig (newer models), which play the player's animations and not the NPC ones.
     headsOnPlayerRig = {
         "MAKEOVER_MAGE_NPC_MALE",
         "MAKEOVER_MAGE_NPC_FEMALE",

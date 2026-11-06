@@ -1,5 +1,5 @@
--- The animations the plugin lists, from src/data/animation_list.lua (already in the dropdown's order), their names
--- turned into this game build's ids once, at load. An animation the game does not know by its name is left out.
+-- The animations the plugin lists, from src/data/animation_list.lua, their names turned into this build's ids once,
+-- at load.
 
 local AnimationList = require("src/data/animation_list")
 local GameIds = require("src/game/game_ids")
@@ -26,7 +26,6 @@ for _, listKind in ipairs({ "npc", "player" }) do
     end
 end
 
--- How the two kinds of animation go with each other (see src/data/animation_list.lua), as ids.
 local function idPairs(namePairs)
     local idTable = {}
     for fromName, toName in pairs(namePairs) do
@@ -48,18 +47,15 @@ for _, npcName in ipairs(AnimationList.headsOnPlayerRig) do
     if npcID ~= nil then Animations.headsOnPlayerRig[npcID] = true end
 end
 
--- Whether the animation with this id is listed.
 function Animations.isListed(animationID)
     return listedAnimationByID[animationID] ~= nil
 end
 
--- The label of the animation with this id, or nil if it isn't listed.
 function Animations.labelOf(animationID)
     local listed = listedAnimationByID[animationID]
     return listed and listed.listing.label or nil
 end
 
--- Whether the animation with this id is one for the player's own head.
 function Animations.isPlayerAnimation(animationID)
     local listed = listedAnimationByID[animationID]
     return listed ~= nil and listed.isPlayerAnimation
@@ -70,18 +66,15 @@ function Animations.isOnPlayerRig(npcID)
     return Animations.headsOnPlayerRig[npcID] == true
 end
 
--- The animations for the player's own head if `forPlayerHead`, else those for NPC heads: { id, label }, in the order
--- shown.
+-- { id, label } in the dropdown's order, for the player's own head or for NPC heads.
 function Animations.options(forPlayerHead)
     return forPlayerHead and optionsFor.player or optionsFor.npc
 end
 
--- The name of a listed animation (to save a choice by), or nil.
 function Animations.nameOf(animationID)
     return GameIds.nameOf("Seq", animationID)
 end
 
--- The id of the listed animation with this name (a saved choice), or nil.
 function Animations.idOf(name)
     local animationID = seqID(name)
     return Animations.isListed(animationID) and animationID or nil
