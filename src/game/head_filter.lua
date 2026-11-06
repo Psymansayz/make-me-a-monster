@@ -1,16 +1,9 @@
 -- Which of an NPC's variants are worth showing: those whose chat head has a model, one of each look.
 --
--- The head's data comes from ui.NPCCustomisation.new(npcID, false) (the head customisation of that NPC): a
--- variant with no head models is blank, and variants with the same models and the same recolours and
--- rematerials (the source lists) look the same. The recolour and rematerial targets (recolourDest and
--- rematerialDest) are left out of the comparison: the source lists are empty for every NPC, and heads that
--- differ only in the targets look alike. Nothing is drawn to find this out.
---
--- Workaround: the lists on a customisation are engine collections, so they are read with pcall, with
--- ipairs and, failing that, pairs.
--- An NPC whose head data can't be read at all (the game refuses to make a head customisation for it) has no
--- head to show, like a blank one: it is left out. (Unless the customisation type is missing altogether in
--- this client: then nothing can be told, and every variant is kept.)
+-- The lists on a customisation are engine collections: so they are read with pcall, with ipairs, failing that pairs.
+-- The recolour and rematerial targets aren't compared: heads that differ only in those look alike.
+-- An NPC whose head data can't be read has no head to show. (If this client has no customisation type at all, every
+-- variant is kept.)
 
 local Blacklist = require("src/data/head_blacklist")
 
@@ -112,9 +105,7 @@ function HeadFilter.newestModel(npcID)
     return highest
 end
 
--- The ids worth showing from `ids` (in order): those with a head model, the first of each look. Only these
--- can be made the active head, so the active one is never a hidden one. Blacklisted ids are left out without
--- being checked.
+-- The ids worth showing from `ids`, in order. Blacklisted ids are left out without being checked.
 function HeadFilter.variants(ids)
     local shown, seen = {}, {}
     local canTell = ui ~= nil and ui.NPCCustomisation ~= nil

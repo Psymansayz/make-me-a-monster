@@ -1,7 +1,4 @@
--- TEMPORARY debug window: every chat head left after the filtering, as a paged grid (like the variants window),
--- for finding the ones that should be blacklisted. Clicking a head flags it (it turns red) and logs its id; click
--- it again to take the flag off. "Log flagged" prints every flagged id in one line, ready to paste into
--- src/data/head_blacklist.lua. A search box narrows the heads by name or id, and a page box jumps to a page.
+-- TEMPORARY debug window: every listed chat head, for flagging the ones that should be blacklisted.
 --
 -- HeadFlaggingWindow.open(PrettyUI, parent, heads, nameOf, animFor, options): heads = { id... } in the order shown.
 -- options (all optional) lets the same window show and flag other things than heads (the animations on Hans):
@@ -173,7 +170,7 @@ local function setCellHidden(headCell, hidden)
     end
 end
 
--- One of the window's PAGE_SIZE cells, made once and used for every page (see src/ui/all_heads_window.lua).
+-- One of the window's PAGE_SIZE cells, made once and used for every page.
 local function makeCell(position)
     local windowContent = windowState.window.content
     local headCell = { index = position }
@@ -372,8 +369,7 @@ function HeadFlaggingWindow.close()
     pcall(function() window:Destroy() end)
 end
 
--- Every frame while the window is open: what the buttons and boxes asked for (done here, not inside their own handlers), and the cells
--- fitted to the window's size.
+-- Every frame while the window is open: what the buttons and boxes asked for, and the cells fitted to its size.
 function HeadFlaggingWindow.tick()
     if windowState == nil or windowState.window == nil then return end
     local navigation = windowState.nav

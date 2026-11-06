@@ -1,18 +1,8 @@
--- TEMPORARY debug window, for grouping heads by hand: the heads of the "all heads" window sorted by their models, in
--- the debug grid (src/debug/head_flagging_window.lua). Select heads on any page. "Log group" logs them as one group:
--- a group's shown head selected stays in the window, else the lowest id, and the rest leave it. The tool picks the
--- head a saved group shows by its most common name. "Log duplicates" logs them as heads to blacklist as
--- duplicates and they all leave it; the next head clicked is logged as the one they are duplicates of, and stays:
+-- TEMPORARY debug window, for grouping heads by hand: the listed heads sorted by their models. Its log lines, saved in
+-- src/data/head_groups.lua by tools/apply_grouping_log.py:
 -- HEADGROUP|group|line/lines|id=Name@CONSTANT~id=Name@CONSTANT...
 -- HEADDUPLICATES|batch|line/lines|id=Name@CONSTANT~id=Name@CONSTANT...
 -- HEADDUPLICATEOF|batch|id=Name@CONSTANT
--- tools/apply_grouping_log.py saves those lines in src/data/head_groups.lua: only the first head of each saved group
--- is shown, and the numbers go on from there. Until then a reload brings the heads logged back.
---
--- HeadGroupingWindow.open(PrettyUI, parent, heads, nameOf, animationFor): reads every head's customisation (a moment's
--- pause). Closed with HeadFlaggingWindow.close().
--- HeadGroupingWindow.logExactDuplicates(heads, nameOf) -> batches logged so far, batches in all: the heads with exactly
--- the same customisation, whatever their names, logged as the lines above. Open the window again afterwards.
 
 local HeadFilter = require("src/game/head_filter")
 local HeadFlaggingWindow = require("src/debug/head_flagging_window")
@@ -140,8 +130,7 @@ function HeadGroupingWindow.open(PrettyUI, parent, heads, nameOf, animationFor)
             sortedHeads[#sortedHeads + 1], modelsOf[npcID] = npcID, HeadFilter.headModels(npcID)
         end
     end
-    -- A head has up to five models and the first is not always the lowest: so the lists are compared model by model in
-    -- the game's order, which keeps the heads built from the same models together.
+    -- Compared model by model in the game's order: it keeps the heads built from the same models together.
     table.sort(sortedHeads, function(firstHead, secondHead)
         local firstModels, secondModels = modelsOf[firstHead], modelsOf[secondHead]
         for position = 1, math.max(#firstModels, #secondModels) do

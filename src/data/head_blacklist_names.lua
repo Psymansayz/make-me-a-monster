@@ -3934,5 +3934,11 @@ return {
         [14730]="Kris",
         [21118]="Lightning",
         [32520]="Lil Hero",
+        [5036]="Major Collect",
+        [17780]="Prototype colossus mk I",
+        [21082]="Rainbow loot beam",
+        [15328]="Ranger",
+        [15335]="Ranger",
+        [18497]="Wight ranger",
     },
 }

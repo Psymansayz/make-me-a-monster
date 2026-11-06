@@ -1,7 +1,5 @@
--- The "all heads" window: every listed chat head in a paged grid (src/ui/head_grid.lua), with a search by name or id
--- and a check box for one head of each group or every head.
--- AllHeadsWindow.open(PrettyUI, parent, heads, headsOfEachGroup, current, onPick, nameOf, nameForGroupOf,
--- headsMatching); close(); isOpen(); updateAnimations(); refreshHeadSize().
+-- The "all heads" window: every listed chat head in a paged grid, with a search by name or id and a check box for one
+-- head of each group or every head.
 
 local Settings = require("src/data/settings")
 local HeadGrid = require("src/ui/head_grid")
@@ -13,15 +11,14 @@ AllHeadsWindow.onClosed = nil -- function(): called when the window has closed, 
 
 local grid = nil -- the HeadGrid while the window is open
 
--- The lower case names of the heads listed, for the search box: made once for a list (the same list is given every
--- time the window opens).
+-- The lower case names of the heads listed, for the search box: made once for a list.
 local loweredNamesOfList, loweredNames = nil, nil
 
 -- { id -> name } of the heads a search chose with one head per group, each as what the search matched.
 local searchedNames = nil
 
--- The heads for the search text (all of them if it is blank), and their names if the search chose them. Every head goes
--- by its name or id; with one head per group, by every member of its group: headsMatching(heads, words).
+-- The heads for the search text, and their names if the search chose them. With one head per group, a head goes by
+-- every member of its group.
 local function matchingHeads(heads, text, headsMatching)
     searchedNames = nil
     local words = {}

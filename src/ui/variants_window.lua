@@ -1,11 +1,5 @@
--- The "variants" window: the heads of a group of the NPC chosen, in a 3x3 grid (src/ui/head_grid.lua), and a button to
--- its next group if it is in several; with the player's own head in use, just that head
--- (VariantsWindow.PLAYER_HEAD_ID).
--- VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPick, labelFor, view) opens the window or gives
--- the open one these heads. view = { page, buttonText, onButton }: the page (else that of the head in use), and the
--- button's. firstView(npcID, groups); remember(npcID, npcGroup); selectGroup(npcID, npcGroup); setButton(text);
--- close(); isOpen();
--- updateAnimations(); refreshHeadSize().
+-- The "variants" window: the heads of a group of the NPC chosen, in a 3x3 grid, and a button to its next group if it is
+-- in several; with the player's own head in use, just that head.
 
 local Settings = require("src/data/settings")
 local HeadGrid = require("src/ui/head_grid")
@@ -27,9 +21,8 @@ local function savedGroupOf(npcGroup)
     return npcGroup.name .. "|" .. #npcGroup.ids
 end
 
--- What the window opens on for this NPC, of its groups (the smallest first): the group it was just selected under, on
--- the page of the head; else the group and the page last open if this NPC was the one chosen then; else the smallest
--- group, on the page of the head.
+-- What the window opens on for this NPC: the group it was just selected under; else the group and page last open if it
+-- was the one chosen then; else its smallest group.
 function VariantsWindow.firstView(npcID, groups)
     local justSelected = groupJustSelected
     groupJustSelected = false
@@ -50,12 +43,11 @@ function VariantsWindow.selectGroup(npcID, npcGroup)
     Settings.variantsPage, groupJustSelected = nil, true
 end
 
--- The NPC chosen and the group shown, for the next time the window opens.
 function VariantsWindow.remember(npcID, npcGroup)
     Settings.variantsNpcID, Settings.variantsGroup = npcID, savedGroupOf(npcGroup)
 end
 
--- What the button says; no text, no button.
+-- No text, no button.
 function VariantsWindow.setButton(text)
     if grid then grid:setExtraButton(text) end
 end
@@ -89,7 +81,7 @@ function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPic
     view = view or {}
     onButton = view.onButton
     local function nameOf(npcID) return labelFor and labelFor(npcID) or nil end
-    -- Already open: the window shows these variants instead (its cells are reused, as for a page change).
+    -- Already open: its cells are reused, as for a page change.
     if grid then
         grid.onPick, grid.nameOf = onPick, nameOf
         grid.page = view.page or grid.page

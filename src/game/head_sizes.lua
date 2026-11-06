@@ -1,6 +1,5 @@
--- Heads drawn at a size of their own, in the dialogue boxes and the windows: a head whose model fills more of the
--- space than other heads do looks far larger than they do at the same camera distance.
--- HeadSizes.of(npcID) -> how many times the size set by the player to draw this head (1 for most).
+-- Some heads need custom sizes. Currently only used to reduce the size of too-large heads, though
+-- in the future it could be used to enlarge too-small heads too. The sizes are multipliers of the normal size.
 
 local GameIds = require("src/game/game_ids")
 
