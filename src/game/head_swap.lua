@@ -7,6 +7,7 @@
 local Animations = require("src/game/animations")
 local Settings = require("src/data/settings")
 local GameIds = require("src/game/game_ids")
+local HeadSizes = require("src/game/head_sizes")
 
 local HeadSwap = {}
 
@@ -123,10 +124,11 @@ local swappedHeads = {}
 
 -- The head is drawn larger by moving the camera closer: Settings.headViewDistance is the view distance to give it (the
 -- game's own is Settings.DEFAULT_HEAD_VIEW_DISTANCE). Only as large as the box's own space: more of the head than that
--- is cut off at its edge.
+-- is cut off at its edge. npcID: the NPC whose head it is, which can have a size of its own (nil: the player's).
 -- Done when a head is put in a box, and for every head shown when the size is changed.
-local function writeHeadViewDistance(component)
-    if component.viewDistance ~= Settings.headViewDistance then component.viewDistance = Settings.headViewDistance end
+local function writeHeadViewDistance(component, npcID)
+    local viewDistance = math.max(1, math.floor(Settings.headViewDistance / HeadSizes.of(npcID)))
+    if component.viewDistance ~= viewDistance then component.viewDistance = viewDistance end
 end
 
 -- One model component: a shown player head becomes the NPC's head. With no NPC chosen (npcID nil), the
@@ -181,13 +183,15 @@ local function swapComponentHead(component, npcID, componentKey)
         swappedHead.npcID = npcID
         component:SetModel(ui.ModelType.NPC_HEAD, npcID)
         applyNpcHeadAnimation(component, npcID, swappedHead.gameAnimation)
-        writeHeadViewDistance(component)
+        writeHeadViewDistance(component, npcID)
         return
     end
     if modelType == NPC_HEAD_MODEL_TYPE and component.modelID1 == npcID then
         -- (already ours: only the animation is kept up)
         local ownRecord = swappedHeads[componentKey]
         applyNpcHeadAnimation(component, npcID, ownRecord and ownRecord.gameAnimation or nil)
+        -- (the game can set the view distance again for the next line, and a head of a size of its own would show it)
+        if ownRecord ~= nil then writeHeadViewDistance(component, npcID) end
         return
     end
     if modelType ~= PLAYER_HEAD_MODEL_TYPE then return end -- an NPC's own head stays
@@ -202,7 +206,7 @@ local function swapComponentHead(component, npcID, componentKey)
     -- logs); SetModel keeps the projection, so the NPC head is given the NPC one.
     component.orthographic = false
     applyNpcHeadAnimation(component, npcID, gameAnimationOfLine)
-    writeHeadViewDistance(component)
+    writeHeadViewDistance(component, npcID)
 end
 
 -- Calls visit(component, componentKey) for each of these head components that can be fetched.
@@ -227,7 +231,8 @@ end
 local function scaleHeadVisit(component, componentKey)
     if component.visibleGlobal == true
         and (swappedHeads[componentKey] ~= nil or tonumber(component.modelType) == PLAYER_HEAD_MODEL_TYPE) then
-        writeHeadViewDistance(component)
+        local swappedHead = swappedHeads[componentKey]
+        writeHeadViewDistance(component, swappedHead and swappedHead.npcID or nil)
     end
 end
 

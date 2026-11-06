@@ -1,6 +1,7 @@
--- The "all heads" window: every listed chat head in a paged grid (src/ui/head_grid.lua), with a search by name or id.
--- AllHeadsWindow.open(PrettyUI, parent, heads, current, onPick, nameOf); close(); isOpen(); updateAnimations();
--- refreshHeadSize().
+-- The "all heads" window: every listed chat head in a paged grid (src/ui/head_grid.lua), with a search by name or id
+-- and a check box for one head of each group or every head.
+-- AllHeadsWindow.open(PrettyUI, parent, heads, headsOfEachGroup, current, onPick, nameOf, nameForGroupOf,
+-- headsMatching); close(); isOpen(); updateAnimations(); refreshHeadSize().
 
 local Settings = require("src/data/settings")
 local HeadGrid = require("src/ui/head_grid")
@@ -16,11 +17,21 @@ local grid = nil -- the HeadGrid while the window is open
 -- time the window opens).
 local loweredNamesOfList, loweredNames = nil, nil
 
--- The heads whose name or id holds every word of the search text (all of them if it is blank).
-local function matchingHeads(heads, text)
+-- { id -> name } of the heads a search chose with one head per group, each as what the search matched.
+local searchedNames = nil
+
+-- The heads for the search text (all of them if it is blank), and their names if the search chose them. Every head goes
+-- by its name or id; with one head per group, by every member of its group: headsMatching(heads, words).
+local function matchingHeads(heads, text, headsMatching)
+    searchedNames = nil
     local words = {}
     for word in text:lower():gmatch("%S+") do words[#words + 1] = word end
     if #words == 0 then return heads end
+    if Settings.oneHeadPerGroup then
+        local matching, names = headsMatching(heads, words)
+        searchedNames = names
+        return matching
+    end
     local matching = {}
     for _, npcID in ipairs(heads) do
         local haystack = (loweredNames[npcID] or "") .. " " .. npcID
@@ -52,8 +63,16 @@ function AllHeadsWindow.close()
     if grid then grid:close() end
 end
 
-function AllHeadsWindow.open(PrettyUI, parent, heads, current, onPick, nameOf)
+function AllHeadsWindow.open(PrettyUI, parent, heads, headsOfEachGroup, current, onPick, nameOf, nameForGroupOf,
+    headsMatching)
     AllHeadsWindow.close()
+    local searchText = ""
+    searchedNames = nil
+    local function headsListed() return Settings.oneHeadPerGroup and headsOfEachGroup or heads end
+    local function nameShown(npcID)
+        if searchedNames then return searchedNames[npcID] end
+        return (Settings.oneHeadPerGroup and nameForGroupOf or nameOf)(npcID)
+    end
     if loweredNamesOfList ~= heads then
         loweredNames = {}
         for _, npcID in ipairs(heads) do loweredNames[npcID] = (nameOf(npcID) or ""):lower() end
@@ -61,20 +80,32 @@ function AllHeadsWindow.open(PrettyUI, parent, heads, current, onPick, nameOf)
     end
     grid = HeadGrid.open(PrettyUI, parent, {
         title = "All heads", columns = 5, rows = 4,
-        minWidth = 640, -- (room for the buttons and boxes in the bottom row)
-        ids = heads, current = current,
+        minWidth = 770, -- (room for the buttons and boxes in the bottom row)
+        ids = headsListed(), current = current,
         savedWidth = Settings.galleryWidth, savedHeight = Settings.galleryHeight,
         savedX = Settings.galleryX, savedY = Settings.galleryY,
         withSearch = true,
-        nameOf = nameOf,
+        toggle = {
+            text = "One per group", selected = Settings.oneHeadPerGroup,
+            onChange = function(selected)
+                Settings.oneHeadPerGroup = selected
+                grid:setHeads(matchingHeads(headsListed(), searchText, headsMatching), grid.current, nil, true)
+            end,
+        },
+        nameOf = nameShown,
         animationFor = function(npcID)
             return AllHeadsWindow.animationForNpcHeads and AllHeadsWindow.animationForNpcHeads(npcID) or nil
         end,
         pageLabel = function(page, pages, shown)
-            return ("Page %d of %d (%d heads%s)"):format(page, pages, shown, shown < #heads and " found" or "")
+            local counted = Settings.oneHeadPerGroup and "groups" or "heads"
+            return ("Page %d of %d (%d %s%s)"):format(page, pages, shown, counted,
+                shown < #headsListed() and " found" or "")
         end,
-        onPick = onPick,
-        onSearch = function(text) grid:setHeads(matchingHeads(heads, text), grid.current) end,
+        onPick = function(npcID) onPick(npcID, nameShown(npcID)) end, -- (with the name it was picked under)
+        onSearch = function(text)
+            searchText = text
+            grid:setHeads(matchingHeads(headsListed(), text, headsMatching), grid.current)
+        end,
         onPlacement = function(width, height, x, y)
             Settings.galleryWidth, Settings.galleryHeight, Settings.galleryX, Settings.galleryY = width, height, x, y
         end,

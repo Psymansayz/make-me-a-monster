@@ -7,7 +7,13 @@
 -- options (all optional) lets the same window show and flag other things than heads (the animations on Hans):
 -- title; logLabel (the word the log lines start with, "blacklist" for heads); setup(model, id), which sets a cell's
 -- model up in place of the NPC head and animation; tint(id), the colour { r, g, b, a } of a cell not flagged;
--- flaggedLines(ids), the lines "Log flagged" prints for the flagged ids (in place of the one line of ids).
+-- flaggedLines(ids), the lines "Log flagged" prints for the flagged ids (in place of the one line of ids);
+-- logButton, that button's text; removeOnLog, the heads logged leave the window; quietClicks, no log line per click;
+-- idText(id), the text under the name (in place of the id); secondLogButton and secondFlaggedLines(ids), another
+-- log button beside the first, with its own lines; minWidth, the least the window can be resized to;
+-- headClicked(id), given a click first, true if it used the click (no flag changes); labelNote(), text for the
+-- bottom label in place of the head counts, or nil; firstLogKeeps(ids), the id of the head the first log button
+-- leaves in the window (with removeOnLog).
 -- HeadFlaggingWindow.tick(): every frame. HeadFlaggingWindow.close().
 
 local HeadFlaggingWindow = {}
@@ -62,16 +68,38 @@ local function flaggedLine()
     return #variantIDs, table.concat(variantIDs, ", ")
 end
 
+local function updatePageLabel()
+    local flaggedCount = 0
+    for _ in pairs(windowState.flagged) do flaggedCount = flaggedCount + 1 end
+    local note = windowState.labelNote and windowState.labelNote()
+    pcall(function()
+        windowState.nav.label.content = note
+            and ("%s (page %d of %d)"):format(note, windowState.page, windowState.pages)
+            or ("page %d of %d, %d heads%s, %d flagged"):format(windowState.page,
+            windowState.pages, #windowState.shown, #windowState.shown < #windowState.all and " found" or "",
+            flaggedCount)
+    end)
+end
+
 local function toggle(headCell)
     local npcID = headCell.id
+    if windowState.headClicked and windowState.headClicked(npcID) then
+        updatePageLabel()
+        return
+    end
     if windowState.flagged[npcID] then
         windowState.flagged[npcID] = nil
-        say(("%s removed: %d (%s)"):format(windowState.logLabel, npcID, windowState.nameOf(npcID) or "?"))
+        if not windowState.quietClicks then
+            say(("%s removed: %d (%s)"):format(windowState.logLabel, npcID, windowState.nameOf(npcID) or "?"))
+        end
     else
         windowState.flagged[npcID] = true
-        say(("%s: %d (%s)"):format(windowState.logLabel, npcID, windowState.nameOf(npcID) or "?"))
+        if not windowState.quietClicks then
+            say(("%s: %d (%s)"):format(windowState.logLabel, npcID, windowState.nameOf(npcID) or "?"))
+        end
     end
     paintCell(headCell, true)
+    updatePageLabel()
 end
 
 -- The grid for the window's content as it is now.
@@ -119,9 +147,14 @@ local function placeNavigation(grid)
     pcall(function() navigation.search.root:SetPos(PAD + 180, y + 2) end)
     pcall(function() navigation.jump.root:SetPos(PAD + 392, y + 2) end)
     pcall(function() navigation.log.root:SetPos(grid.width - PAD - 110, y + 2) end)
+    local buttonsWidth = 116
+    if navigation.secondLog then
+        buttonsWidth = 232
+        pcall(function() navigation.secondLog.root:SetPos(grid.width - PAD - 226, y + 2) end)
+    end
     pcall(function()
         navigation.label:SetPos(PAD + 470, y + 8)
-        navigation.label:SetSize(math.max(1, grid.width - PAD * 2 - 470 - 116), 20)
+        navigation.label:SetSize(math.max(1, grid.width - PAD * 2 - 470 - buttonsWidth), 20)
     end)
 end
 
@@ -184,7 +217,7 @@ local function fillCell(headCell, npcID)
         if animationID ~= nil then headCell.model.animID = animationID end
     end
     headCell.name.content = windowState.nameOf(npcID) or "?"
-    headCell.idLabel.content = "ID " .. npcID
+    headCell.idLabel.content = windowState.idText and windowState.idText(npcID) or ("ID " .. npcID)
     setCellHidden(headCell, false)
     paintCell(headCell, false)
 end
@@ -213,14 +246,7 @@ local function showPage()
             if not succeeded then say("could not fill a cell: " .. tostring(errorMessage)) end
         end
     end
-    pcall(function()
-        windowState.nav.label.content = ("page %d of %d, %d heads%s, %d flagged"):format(
-            windowState.page, windowState.pages, #windowState.shown, #windowState.shown < #windowState.all and " found" or "", (function()
-                local n = 0
-                for _ in pairs(windowState.flagged) do n = n + 1 end
-                return n
-            end)())
-    end)
+    updatePageLabel()
     layoutWindow()
     local wanted = { windowState.page > 1, windowState.page < windowState.pages }
     for position, button in ipairs({ windowState.nav.previous, windowState.nav.after }) do
@@ -268,7 +294,7 @@ function HeadFlaggingWindow.open(PrettyUI, parent, heads, nameOf, animFor, optio
     local width = COLUMNS * START_CELL_W + (COLUMNS - 1) * GAP + PAD * 2 + BORDERS
     local height = ROWS * START_CELL_H + (ROWS - 1) * GAP + PAD * 2 + NAV_HEIGHT + 4 + TITLE_AND_BOTTOM
     local minWidth = COLUMNS * MIN_CELL_W + (COLUMNS - 1) * GAP + PAD * 2 + BORDERS
-    minWidth = math.max(minWidth, 760) -- (room for the buttons and boxes in the bottom row)
+    minWidth = math.max(minWidth, options.minWidth or 760) -- (room for the buttons and boxes in the bottom row)
     local minHeight = ROWS * MIN_CELL_H + (ROWS - 1) * GAP + PAD * 2 + NAV_HEIGHT + 4 + TITLE_AND_BOTTOM
     width = math.max(math.min(minWidth, parent.width), math.min(width, parent.width))
     height = math.max(math.min(minHeight, parent.height), math.min(height, parent.height))
@@ -280,7 +306,10 @@ function HeadFlaggingWindow.open(PrettyUI, parent, heads, nameOf, animFor, optio
     windowState = { all = heads, shown = heads, page = 1, pages = math.max(1, math.ceil(#heads / PAGE_SIZE)),
         flagged = {}, cells = {}, nav = {}, nameOf = nameOf, animFor = animFor, lowered = lowered, query = "",
         logLabel = options.logLabel or "blacklist", setup = options.setup, tint = options.tint,
-        flaggedLines = options.flaggedLines }
+        flaggedLines = options.flaggedLines, removeOnLog = options.removeOnLog, quietClicks = options.quietClicks,
+        idText = options.idText, secondFlaggedLines = options.secondFlaggedLines,
+        headClicked = options.headClicked, labelNote = options.labelNote,
+        firstLogKeeps = options.firstLogKeeps }
     local openedState = windowState
     local succeeded, errorMessage = pcall(function()
         openedState.window = PrettyUI.Window.new(parent, {
@@ -317,7 +346,12 @@ function HeadFlaggingWindow.open(PrettyUI, parent, heads, nameOf, animFor, optio
             width = 70, height = 30, placeholder = "Page", filterMode = ui.InputFieldFilterMode.NUMERIC,
             onSubmit = function(_, text) navigation.jumpTo = tonumber(text) end,
         })
-        navigation.log = PrettyUI.SimpleButton.new(windowContent, "Log flagged", function() navigation.logFlagged = true end, { width = 110 })
+        navigation.log = PrettyUI.SimpleButton.new(windowContent, options.logButton or "Log flagged", function() navigation.logFlagged = true end, { width = 110 })
+        if options.secondLogButton then
+            navigation.secondLog = PrettyUI.SimpleButton.new(windowContent, options.secondLogButton, function()
+                navigation.logFlagged, navigation.logSecond = true, true
+            end, { width = 110 })
+        end
         navigation.label = ui.Text.new(windowContent)
         navigation.label.maxLines = 1
         navigation.label.font = id.Font.MUSEO_SANS_11PT_REGULAR
@@ -363,14 +397,32 @@ function HeadFlaggingWindow.tick()
     end
     if navigation.logFlagged then
         navigation.logFlagged = false
-        if windowState.flaggedLines then
-            local variantIDs = {}
-            for npcID in pairs(windowState.flagged) do variantIDs[#variantIDs + 1] = npcID end
-            table.sort(variantIDs)
-            for _, text in ipairs(windowState.flaggedLines(variantIDs)) do say(text) end
+        local flaggedLines, keptHeadOf = windowState.flaggedLines, windowState.firstLogKeeps
+        if navigation.logSecond then
+            flaggedLines, keptHeadOf, navigation.logSecond = windowState.secondFlaggedLines, nil, false
+        end
+        local variantIDs = {}
+        for npcID in pairs(windowState.flagged) do variantIDs[#variantIDs + 1] = npcID end
+        table.sort(variantIDs)
+        if flaggedLines then
+            for _, text in ipairs(flaggedLines(variantIDs)) do say(text) end
         else
             local count, labelText = flaggedLine()
             say(("%s ids flagged (%d): %s"):format(windowState.logLabel, count, labelText))
+        end
+        if windowState.removeOnLog and next(windowState.flagged) ~= nil then
+            local keptHead = keptHeadOf and keptHeadOf(variantIDs)
+            local remainingHeads = {}
+            for _, npcID in ipairs(windowState.all) do
+                if not windowState.flagged[npcID] or npcID == keptHead then
+                    remainingHeads[#remainingHeads + 1] = npcID
+                end
+            end
+            local page = windowState.page
+            windowState.all, windowState.flagged = remainingHeads, {}
+            applySearch()
+            windowState.page = page -- (the same page, or the last if that one is gone: showPage keeps it in range)
+            showPage()
         end
     end
     local succeeded, width, height = pcall(function() return windowState.window.content.width, windowState.window.content.height end)

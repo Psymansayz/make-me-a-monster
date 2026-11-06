@@ -1,4 +1,4 @@
--- Make Me A Monster: choose an NPC in the plugin's page, and its head replaces yours in the game's
+-- Make Me A Monster: choose an NPC in the settings, and its head replaces yours in the game's
 -- dialogue boxes.
 
 local Settings = require("src/data/settings")
@@ -12,9 +12,10 @@ local GameIds = require("src/game/game_ids")
 local PrettyUI = prettyui
 
 -- TEMPORARY debug window (src/debug/head_flagging_window.lua): every head left after the filtering, to flag the ones to
--- blacklist. A button for it is added to the plugin page. Remove DEBUG_HEAD_BROWSER and what uses it when done.
+-- blacklist. A button for it is added to the settings window. Remove DEBUG_HEAD_BROWSER and what uses it when done.
 local DEBUG_HEAD_BROWSER = true
 local HeadFlaggingWindow = require("src/debug/head_flagging_window")
+local HeadGroupingWindow = require("src/debug/head_grouping_window")
 
 -- Development: names in the plugin's data that this game build does not know (renamed or removed: left out).
 if #GameIds.unresolved > 0 then
@@ -56,11 +57,15 @@ VariantsWindow.animationForNpcHeads = function(npcID) return HeadSwap.npcHeadAni
 AllHeadsWindow.animationForNpcHeads = VariantsWindow.animationForNpcHeads
 VariantsWindow.animationForPlayerHead = function() return HeadSwap.playerHeadAnimation(true) end
 
--- Nothing is read from the game (its NPCs, their heads, the animations) until the plugin page is first opened:
+-- Nothing is read from the game (its NPCs, their heads, the animations) until the settings are first built:
 -- the head in dialogue needs only the saved NPC id.
 local engaged = false
 
-local pluginPage = nil -- the plugin page's controls: { view, search, combo, status, progress }
+local pluginPageLayer = nil -- the layer the client gives the plugin's page
+local pluginPageToggle = nil -- the page's button switching the settings between the page and their own window
+local pluginPageView = nil -- what the page holds under that button
+local pageNoticeText = nil -- says on the page why the window did not open
+local settingsControls = nil -- the controls while they are built; .window is the window holding them, if one is
 local matchedMembersByEntryID = {} -- entry id -> the name of the group that matched the search (a member), or nil
 local groupsByEntryID = {} -- entry id -> the group (every NPC of one name) the dropdown lists now
 local listingsByEntryID = {} -- entry id -> the animation the animation dropdown lists
@@ -158,9 +163,9 @@ local function animationStatusText()
 end
 
 local function refreshStatusTexts()
-    if pluginPage then
-        pluginPage.chatheadStatusText.content = chatheadStatusMessage()
-        pluginPage.animationStatusText.content = animationStatusText()
+    if settingsControls then
+        settingsControls.chatheadStatusText.content = chatheadStatusMessage()
+        settingsControls.animationStatusText.content = animationStatusText()
     end
 end
 
@@ -186,13 +191,15 @@ end
 -- The animation dropdown filled with the animations for the head in use (the player's own, or the NPC heads'), in
 -- label order, the chosen one selected. A choice saved earlier that is no longer listed is cleared.
 local function refreshAnimationDropdown()
-    if pluginPage == nil then return end
+    if not engaged then return end
+    -- (done with the settings window closed too: a heads window can stay open and change the head in use)
     fitAnimationToHead()
     if Settings.chosenAnimationID ~= nil and not Animations.isListed(Settings.chosenAnimationID) then
         Settings.chosenAnimationID = nil
         updateOpenWindows()
         refreshStatusTexts()
     end
+    if settingsControls == nil then return end
     -- The animations for NPC heads, unless the head in use plays the player's animations and no heads window is open
     -- (the heads in it are NPC heads, whatever head is in use).
     local npcHeads = not playerAnimationsInUse() or AllHeadsWindow.isOpen()
@@ -208,22 +215,44 @@ local function refreshAnimationDropdown()
     if npcHeads then shownChoiceID = HeadSwap.animationForHead(shownChoiceID, false) end
     local selected = findSelectedEntryID(listingsByEntryID, function(listing) return listing.id == shownChoiceID end)
     isRefreshingAnimationDropdown = true
-    pcall(function() pluginPage.animationDropdown:SetEntries(entries, selected) end)
+    pcall(function() settingsControls.animationDropdown:SetEntries(entries, selected) end)
     isRefreshingAnimationDropdown = false
     -- (a blank box with nothing chosen, else our label with its name: the dropdown's own text doesn't follow a choice made
     -- by the plugin)
-    coverDropdownText(pluginPage.animationDropdown, true, selected ~= nil and listingsByEntryID[selected].label or nil)
+    coverDropdownText(settingsControls.animationDropdown, true, selected ~= nil and listingsByEntryID[selected].label or nil)
+end
+
+-- A head can be in several groups: the one the head chosen was picked from, while it is in it (kept for this session
+-- only), else the one NpcDirectory.groupOfNpc says.
+local pickedGroup = nil
+
+local function groupOfChosenNpc()
+    local npcID = Settings.chosenNpcID
+    if npcID == nil then return nil end
+    for _, groupNpcID in ipairs(pickedGroup and pickedGroup.ids or {}) do
+        if groupNpcID == npcID then return pickedGroup end
+    end
+    return NpcDirectory.groupOfNpc(npcID)
+end
+
+-- A dropdown entry's label. A name that is its group's own stands for the whole group (Fairy holds Jukat too), so it
+-- counts what the variants window will show, not only the NPCs with exactly that name.
+local function labelOfEntry(npcGroup, member, memberNpcCount)
+    if member == nil or NpcDirectory.lowerCaseAscii(member.name) == NpcDirectory.lowerCaseAscii(npcGroup.name) then
+        return NpcDirectory.labelOfGroup(npcGroup, #visibleIds(npcGroup))
+    end
+    return NpcDirectory.labelOfMember(member, memberNpcCount)
 end
 
 -- The dropdown refilled with the NPCs matching the search box.
 local function refreshNpcDropdown()
-    if pluginPage == nil then return end
+    if settingsControls == nil then return end
     local query = ""
-    pcall(function() query = pluginPage.npcSearchBox:GetText() end)
+    pcall(function() query = settingsControls.npcSearchBox:GetText() end)
     local matchingGroups = NpcDirectory.searchGroups(query, RESULTS_SHOWN, visibleIds)
     local matchCount = #matchingGroups
-    local chosenGroup = Settings.chosenNpcID and NpcDirectory.groupOfNpc(Settings.chosenNpcID) or nil
-    local chosenMember = Settings.chosenNpcID and NpcDirectory.memberOfNpc(Settings.chosenNpcID) or nil
+    local chosenGroup = groupOfChosenNpc()
+    local chosenMember = Settings.chosenNpcID and NpcDirectory.memberOfNpc(Settings.chosenNpcID, chosenGroup) or nil
     -- With nothing typed, the NPC chosen stays in the list (at the top) even if it isn't among the first, so
     -- the dropdown can show it after a restart.
     if chosenGroup ~= nil and query:find("^%s*$") then
@@ -242,38 +271,41 @@ local function refreshNpcDropdown()
         -- (one name is shown, with how many NPCs matched the search in all)
         local matchedMember, matchedNpcCount = NpcDirectory.memberMatching(npcGroup, query)
         if npcGroup == chosenGroup and chosenMember ~= nil then matchedMember, matchedNpcCount = chosenMember, nil end
-        local label = matchedMember and NpcDirectory.labelOfMember(matchedMember, matchedNpcCount) or NpcDirectory.labelOfGroup(npcGroup, #visibleIds(npcGroup))
-        entries[#entries + 1] = { label = label, id = entryID }
+        entries[#entries + 1] = { label = labelOfEntry(npcGroup, matchedMember, matchedNpcCount), id = entryID }
         groupsByEntryID[entryID] = npcGroup
         matchedMembersByEntryID[entryID] = matchedMember
     end
     local selected = findSelectedEntryID(groupsByEntryID, function(npcGroup) return npcGroup == chosenGroup end)
     isRefreshingNpcDropdown = true
-    pcall(function() pluginPage.npcDropdown:SetEntries(entries, selected) end)
+    pcall(function() settingsControls.npcDropdown:SetEntries(entries, selected) end)
     isRefreshingNpcDropdown = false
     -- The closed box shows that name at once (the dropdown's own text doesn't follow a selection made by the plugin until it is
     -- opened), and nothing if the NPC isn't in the list.
     if selected ~= nil and chosenMember ~= nil then
-        coverDropdownText(pluginPage.npcDropdown, true, NpcDirectory.labelOfMember(chosenMember))
+        coverDropdownText(settingsControls.npcDropdown, true, labelOfEntry(chosenGroup, chosenMember))
     else
-        coverDropdownText(pluginPage.npcDropdown, selected == nil)
+        coverDropdownText(settingsControls.npcDropdown, selected == nil)
     end
     pcall(function()
         if NpcDirectory.done then
-            pluginPage.matchCountText.content = matchCount == RESULTS_SHOWN and ("Showing the first " .. RESULTS_SHOWN .. " matches.")
+            settingsControls.matchCountText.content = matchCount == RESULTS_SHOWN and ("Showing the first " .. RESULTS_SHOWN .. " matches.")
                 or (matchCount .. " matches.")
         else
-            pluginPage.matchCountText.content = "Reading the game's NPCs: " .. #NpcDirectory.list .. " found so far..."
+            settingsControls.matchCountText.content = "Reading the game's NPCs: " .. #NpcDirectory.list .. " found so far..."
         end
     end)
 end
 
 local openVariantsWindow -- (below)
+local closeSettingsWindow -- (below)
+local switchSettings -- (below)
 local openAllHeadsWindow -- (below)
 local openAnimationFlaggingWindow -- (below, debug only)
 local openHeadFlaggingWindow -- (below, debug only)
 local openBlacklistedHeadsWindow -- (below, debug only)
 local openNewestHeadsWindow -- (below, debug only)
+local openHeadGroupingWindow -- (below, debug only)
+local logExactDuplicates -- (below, debug only)
 local logListedHeadModels -- (below, debug only)
 local logListedHeadNames -- (below, debug only)
 local logBlacklistConstants -- (below, debug only)
@@ -285,9 +317,11 @@ local function configNameOf(npcID)
 end
 
 -- chosenFrom: "dropdown" or "variants" when the choice came from the NPC dropdown or the variants window (which then
--- already show it), else nil.
-local function chooseNpc(npcID, chosenFrom)
+-- already show it), else nil. selectedGroup: the group the head was selected under, if its label named one.
+local function chooseNpc(npcID, chosenFrom, selectedGroup)
     Settings.chosenNpcID = npcID
+    if chosenFrom == nil then pickedGroup = selectedGroup end
+    if selectedGroup ~= nil then VariantsWindow.selectGroup(npcID, selectedGroup) end
     refreshAnimationDropdown() -- (fits the animation to the head first; the windows open follow if it changed)
     HeadSwap.refreshOpenDialogues() -- (the dialogue boxes open follow the head chosen)
     if chosenFrom ~= "dropdown" then refreshNpcDropdown() end -- (the dropdown shows it, or nothing)
@@ -301,11 +335,18 @@ local function isSelectionEvent(eventType)
     return not succeeded or selected or eventType == nil
 end
 
--- The window of every NPC sharing the chosen one's name; a click on one makes it the active head.
-openVariantsWindow = function()
+-- What the variants window's button says for this group of the NPC chosen, or nil if the NPC is in no other.
+local function nextGroupButtonText(npcGroup)
+    local nextGroup = NpcDirectory.nextGroupOfNpc(Settings.chosenNpcID, npcGroup)
+    return nextGroup and ("View " .. nextGroup.name .. " variants") or nil
+end
+
+-- The window of every NPC of this group of the chosen one; a click on one makes it the active head. page: the page
+-- to show, else that of the head chosen.
+local function showVariantsOf(npcGroup, page)
     -- Works with a single variant too, as a preview of the head.
     -- With the player's own head in use, the window shows just that head.
-    local npcGroup = Settings.chosenNpcID and NpcDirectory.groupOfNpc(Settings.chosenNpcID) or nil
+    pickedGroup = npcGroup -- (a variant picked in the window stays in this group)
     local showPlayerHeadOnly = Settings.chosenNpcID == nil
     local noticeText = ""
     if npcGroup == nil and not showPlayerHeadOnly then
@@ -316,66 +357,113 @@ openVariantsWindow = function()
             return ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
         end)
         if succeeded and pluginLayer ~= nil then
-            local function chooseFromVariants(npcID) chooseNpc(npcID ~= VariantsWindow.PLAYER_HEAD_ID and npcID or nil, "variants") end
+            -- (the page stays: only what the button says can change, as the head picked has groups of its own)
+            local function chooseFromVariants(npcID)
+                chooseNpc(npcID ~= VariantsWindow.PLAYER_HEAD_ID and npcID or nil, "variants")
+                if Settings.chosenNpcID ~= nil then
+                    VariantsWindow.remember(Settings.chosenNpcID, pickedGroup)
+                    VariantsWindow.setButton(nextGroupButtonText(pickedGroup))
+                end
+            end
             if showPlayerHeadOnly then
                 VariantsWindow.open(PrettyUI, pluginLayer, "My head", { VariantsWindow.PLAYER_HEAD_ID }, VariantsWindow.PLAYER_HEAD_ID, chooseFromVariants)
             else
                 -- Variants with no head, and ones that look like another, are left out.
                 local variantIDs = visibleIds(npcGroup)
                 if #variantIDs == 0 then variantIDs = npcGroup.ids end
-                VariantsWindow.open(PrettyUI, pluginLayer, npcGroup.name .. " variants", variantIDs, Settings.chosenNpcID, chooseFromVariants, NpcDirectory.nameOfNpc)
+                VariantsWindow.remember(Settings.chosenNpcID, npcGroup)
+                VariantsWindow.open(PrettyUI, pluginLayer, npcGroup.name .. " variants", variantIDs,
+                    Settings.chosenNpcID, chooseFromVariants, NpcDirectory.nameOfNpc, {
+                        page = page,
+                        buttonText = nextGroupButtonText(npcGroup),
+                        onButton = function()
+                            showVariantsOf(NpcDirectory.nextGroupOfNpc(Settings.chosenNpcID, pickedGroup))
+                            refreshNpcDropdown() -- (the dropdown shows the group the head is now in)
+                        end,
+                    })
             end
         else
             noticeText = "The game screen isn't ready."
         end
     end
-    if pluginPage then pluginPage.noticeText.content = noticeText end
+    if settingsControls then settingsControls.noticeText.content = noticeText end
 end
 
--- The plugin's page in the client's Plugins window.
-local function buildPage(pluginLayer)
-    engaged = true
-    -- The saved list of heads, if there is one: no scan.
-    local okList, savedColours = pcall(require, "src/data/listed_heads")
-    if okList and type(savedColours) == "table" and not NpcDirectory.baked then NpcDirectory.loadBaked(savedColours) end
-    local pageView = PrettyUI.SimpleView.new(pluginLayer, { width = pluginLayer.width, height = pluginLayer.height })
-    pageView:AddTitle("Make Me A Monster")
-    pageView:AddText("Pick an NPC: its head replaces yours in dialogue boxes.")
-    local pageControls = { view = pageView }
-    pageControls.chatheadStatusText = pageView:AddText(chatheadStatusMessage())
-    pageControls.npcSearchBox = pageView:AddTextField({
+-- The window opened, or the open one given the head chosen: see VariantsWindow.firstView.
+openVariantsWindow = function()
+    local npcID = Settings.chosenNpcID
+    if npcID == nil then return showVariantsOf(nil) end
+    showVariantsOf(VariantsWindow.firstView(npcID, NpcDirectory.groupsOfNpc(npcID)))
+end
+
+-- TEMPORARY: every Troll head's customisation (models, recolours, texture targets), to find the group's duplicates.
+-- Removed once answered, with its button.
+local function logTrollLooks()
+    local HeadFilter = require("src/game/head_filter")
+    for _, npcGroup in ipairs(NpcDirectory.groups) do
+        if npcGroup.name == "Troll" then
+            print(("[make_me_a_monster] TROLLLOOK|begin|%d heads"):format(#npcGroup.ids))
+            for _, npcID in ipairs(npcGroup.ids) do
+                print(("[make_me_a_monster] TROLLLOOK|%d|%s|%s"):format(npcID, NpcDirectory.nameOfNpc(npcID) or "?",
+                    HeadFilter.describeHead(npcID)))
+            end
+            print("[make_me_a_monster] TROLLLOOK|end")
+        end
+    end
+end
+
+-- The settings window's size, smaller on a smaller screen. The controls scroll when they are taller.
+local SETTINGS_WIDTH, SETTINGS_HEIGHT = 420, 560
+
+local function buildSettingsControls(view, window)
+    view:AddText("Pick an NPC: its head replaces yours in dialogue boxes.")
+    local controls = { window = window }
+    controls.chatheadStatusText = view:AddText(chatheadStatusMessage())
+    controls.npcSearchBox = view:AddTextField({
         placeholder = "Search NPCs by name or id",
         onChange = function() refreshNpcDropdown() end,
     })
-    pageControls.matchCountText = pageView:AddText("")
-    pageControls.npcDropdown = pageView:AddComboBox({
+    controls.matchCountText = view:AddText("")
+    controls.npcDropdown = view:AddComboBox({
         entries = {},
         onChange = function(_, entryID, _, eventType)
             local npcGroup = groupsByEntryID[entryID]
             if isRefreshingNpcDropdown or not isSelectionEvent(eventType) or npcGroup == nil then return end
-            coverDropdownText(pageControls.npcDropdown, false)
-            -- The first NPC of the name that matched the search, else the first of the group that has a head (the lowest
-            -- id may be blank).
+            coverDropdownText(controls.npcDropdown, false)
+            -- The first NPC of the name that matched the search, else the first of the group that has a head (the
+            -- lowest id may be blank).
             local matchedMember = matchedMembersByEntryID[entryID]
-            chooseNpc(matchedMember and matchedMember.ids[1] or visibleIds(npcGroup)[1] or npcGroup.ids[1], "dropdown")
+            pickedGroup = npcGroup
+            local npcID = matchedMember and matchedMember.ids[1] or visibleIds(npcGroup)[1] or npcGroup.ids[1]
+            -- (the entry's label: the group's name, or a name that can be another group's)
+            local label = matchedMember and matchedMember.name or npcGroup.name
+            chooseNpc(npcID, "dropdown",
+                label == npcGroup.name and npcGroup or NpcDirectory.groupLabelled(npcID, label))
         end,
     })
-    showTextWhenClicked(pageControls.npcDropdown)
-    pageView:AddSimpleButton("View variants", function() openVariantsWindow() end)
-    pageView:AddSimpleButton("Browse all heads", function() openAllHeadsWindow() end)
-    pageView:AddSimpleButton("Use my own head", function() chooseNpc(nil) end)
+    showTextWhenClicked(controls.npcDropdown)
+    view:AddSimpleButton("View variants", function() openVariantsWindow() end)
+    view:AddSimpleButton("Browse all heads", function() openAllHeadsWindow() end)
+    view:AddSimpleButton("Use my own head", function() chooseNpc(nil) end)
     if DEBUG_HEAD_BROWSER then
-        pageView:AddSimpleButton("Debug: flag heads for the blacklist", function() openHeadFlaggingWindow() end)
-        pageView:AddSimpleButton("Debug: all animations on Hans", function() openAnimationFlaggingWindow() end)
-        pageView:AddSimpleButton("Debug: blacklisted heads with the player's animations", function() openBlacklistedHeadsWindow() end)
-        pageView:AddSimpleButton("Debug: listed heads, newest models first", function() openNewestHeadsWindow() end)
-        pageView:AddSimpleButton("Debug: log the listed heads' names and models", function() logListedHeadModels() end)
-        pageView:AddSimpleButton("Debug: log the listed heads' game names (id.NPC)", function() logListedHeadNames() end)
-        pageView:AddSimpleButton("Debug: log the blacklisted heads' constants (next page)", function() logBlacklistConstants() end)
+        view:AddSimpleButton("Debug: flag heads for the blacklist", function() openHeadFlaggingWindow() end)
+        view:AddSimpleButton("Debug: all animations on Hans", function() openAnimationFlaggingWindow() end)
+        view:AddSimpleButton("Debug: blacklisted heads with the player's animations", function()
+            openBlacklistedHeadsWindow()
+        end)
+        view:AddSimpleButton("Debug: listed heads, newest models first", function() openNewestHeadsWindow() end)
+        view:AddSimpleButton("Debug: group heads by hand (by model)", function() openHeadGroupingWindow() end)
+        view:AddSimpleButton("Debug: log exact duplicate heads (next page)", function() logExactDuplicates() end)
+        view:AddSimpleButton("Debug: log the Troll group's looks", function() logTrollLooks() end)
+        view:AddSimpleButton("Debug: log the listed heads' names and models", function() logListedHeadModels() end)
+        view:AddSimpleButton("Debug: log the listed heads' game names (id.NPC)", function() logListedHeadNames() end)
+        view:AddSimpleButton("Debug: log the blacklisted heads' constants (next page)", function()
+            logBlacklistConstants()
+        end)
     end
-    pageControls.noticeText = pageView:AddText("")
-    pageControls.headSizeText = pageView:AddText("Head size: " .. Settings.headSizePercent() .. "%")
-    pageView:AddSlider({
+    controls.noticeText = view:AddText("")
+    controls.headSizeText = view:AddText("Head size: " .. Settings.headSizePercent() .. "%")
+    view:AddSlider({
         min = 50,
         max = 300,
         step = 5,
@@ -386,36 +474,200 @@ local function buildPage(pluginLayer)
             HeadSwap.refreshHeadViewDistance() -- (the heads shown now follow)
             AllHeadsWindow.refreshHeadSize()
             VariantsWindow.refreshHeadSize()
-            pageControls.headSizeText.content = "Head size: " .. percent .. "%"
+            controls.headSizeText.content = "Head size: " .. percent .. "%"
         end,
     })
-    pageView:AddText("Animation for the head:")
-    pageControls.animationStatusText = pageView:AddText(animationStatusText())
-    pageControls.animationDropdown = pageView:AddComboBox({
+    view:AddText("Animation for the head:")
+    controls.animationStatusText = view:AddText(animationStatusText())
+    controls.animationDropdown = view:AddComboBox({
         entries = {},
         onChange = function(_, entryID, _, eventType)
             local selectedListing = listingsByEntryID[entryID]
-            if isRefreshingAnimationDropdown or not isSelectionEvent(eventType) or selectedListing == nil then return end
+            if isRefreshingAnimationDropdown or not isSelectionEvent(eventType) or selectedListing == nil then
+                return
+            end
             Settings.chosenAnimationID = selectedListing.id
-            coverDropdownText(pageControls.animationDropdown, false)
+            coverDropdownText(controls.animationDropdown, false)
             updateOpenWindows()
             refreshStatusTexts()
         end,
     })
-    showTextWhenClicked(pageControls.animationDropdown)
-    pageView:AddSimpleButton("Use default animation", function()
+    showTextWhenClicked(controls.animationDropdown)
+    view:AddSimpleButton("Use default animation", function()
         Settings.chosenAnimationID = nil
         updateOpenWindows()
         refreshAnimationDropdown()
         refreshStatusTexts()
     end)
-    pluginPage = pageControls
+    settingsControls = controls
     refreshNpcDropdown()
     refreshAnimationDropdown()
 end
 
+-- What the controls leave when they go: the labels over their dropdowns (made by this plugin; a page's layer can be
+-- gone by then, its interface unloading silently), and where the window was.
+local function releaseSettingsControls()
+    if settingsControls.window ~= nil then
+        local windowRoot = settingsControls.window.root
+        Settings.settingsX, Settings.settingsY = math.floor(windowRoot.x), math.floor(windowRoot.y)
+    end
+    for _, coverState in pairs(coverStates) do
+        if coverState.label ~= nil then pcall(function() coverState.label:Destroy() end) end
+    end
+    coverStates = {}
+    settingsControls = nil
+end
+
+closeSettingsWindow = function()
+    if settingsControls == nil or settingsControls.window == nil then return end
+    local window = settingsControls.window
+    releaseSettingsControls()
+    window:Destroy()
+end
+
+-- The game is first read when the controls are first built.
+local function engage()
+    engaged = true
+    -- The saved list of heads, if there is one: no scan.
+    local okList, savedHeads = pcall(require, "src/data/listed_heads")
+    if okList and type(savedHeads) == "table" and not NpcDirectory.baked then NpcDirectory.loadBaked(savedHeads) end
+end
+
+-- Opening it again brings it to the front.
+local function openSettingsWindow()
+    if settingsControls ~= nil then return settingsControls.window:Show() end
+    local succeeded, pluginLayer = pcall(function()
+        return ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
+    end)
+    if not succeeded or pluginLayer == nil then
+        pageNoticeText.content = "The game screen isn't ready."
+        return
+    end
+    pageNoticeText.content = ""
+    engage()
+    local width = math.min(SETTINGS_WIDTH, pluginLayer.width)
+    local height = math.min(SETTINGS_HEIGHT, pluginLayer.height)
+    -- Where it was left, else the middle (kept on the screen).
+    local x = Settings.settingsX or math.floor((pluginLayer.width - width) / 2)
+    local y = Settings.settingsY or math.floor((pluginLayer.height - height) / 2)
+    local window = nil
+    local opened, openError = pcall(function()
+        window = PrettyUI.Window.new(pluginLayer, {
+            title = "Make Me A Monster", width = width, height = height, destroyOnClose = true,
+            x = math.max(0, math.min(x, pluginLayer.width - width)),
+            y = math.max(0, math.min(y, pluginLayer.height - height)),
+            -- (closed with its X, which destroys the window itself: the settings go back to the page)
+            onClose = function()
+                releaseSettingsControls()
+                switchSettings(false)
+            end,
+        })
+        buildSettingsControls(window, window)
+    end)
+    if not opened then
+        print("[make_me_a_monster] could not build the settings window: " .. tostring(openError))
+        pageNoticeText.content = "The settings window could not open."
+        settingsControls = nil
+        if window ~= nil then pcall(function() window:Destroy() end) end
+    end
+end
+
+-- The top row of the plugin's page holds the button that switches the settings between the page and their own window.
+local TOGGLE_SIZE, TOGGLE_INSET = 20, 4 -- (as PrettyUI's panels draw this button)
+local TOGGLE_ROW_HEIGHT = TOGGLE_SIZE + TOGGLE_INSET * 2
+
+-- What the page holds under the button: the controls, or with the settings in their window, a way to open it.
+local function fillPage(pluginLayer)
+    local pageView = PrettyUI.SimpleView.new(pluginLayer, {
+        y = TOGGLE_ROW_HEIGHT, width = pluginLayer.width, height = pluginLayer.height - TOGGLE_ROW_HEIGHT,
+    })
+    pluginPageView = pageView
+    pageView:AddTitle("Make Me A Monster")
+    if Settings.settingsPoppedOut then
+        pageView:AddText("The settings are in their own window.")
+        pageView:AddSimpleButton("Open settings", function() openSettingsWindow() end)
+        pageNoticeText = pageView:AddText("")
+    else
+        engage()
+        buildSettingsControls(pageView)
+    end
+end
+
+local function emptyPage()
+    if pluginPageView == nil then return end
+    if settingsControls ~= nil and settingsControls.window == nil then releaseSettingsControls() end
+    pcall(function() pluginPageView:Destroy() end)
+    pluginPageView = nil
+end
+
+local showPageToggleState = nil -- (shows the button's icon for where the settings are now)
+
+switchSettings = function(poppedOut)
+    closeSettingsWindow()
+    emptyPage()
+    Settings.settingsPoppedOut = poppedOut
+    -- The window can outlive the page, which unloads silently: it is built when the client next gives a layer.
+    if ui.Interfaces:GetInterface(pluginPageLayer.interfaceID) == nil then return end
+    showPageToggleState()
+    local succeeded, errorMessage = pcall(fillPage, pluginPageLayer)
+    if not succeeded then print("[make_me_a_monster] could not build the page: " .. tostring(errorMessage)) end
+    if succeeded and poppedOut then openSettingsWindow() end
+end
+
+-- PrettyUI's pop-out icon, or its dock icon with the settings in their window. A sprite of the page's own and not one
+-- of the view's controls: components can't be destroyed in their own click handler, and switching replaces the view.
+local function buildPageToggle(pluginLayer)
+    local button = ui.Sprite.new(pluginLayer)
+    button:SetPos(-TOGGLE_SIZE - TOGGLE_INSET, TOGGLE_INSET, 1.0) -- (from the page's right edge)
+    button:SetSize(TOGGLE_SIZE, TOGGLE_SIZE)
+    button.clickthrough = false
+    local hovered, pressed = false, false
+    local function showState()
+        local states = Settings.settingsPoppedOut and PrettyUI.Sprites.PANEL_DOCK_BUTTON
+            or PrettyUI.Sprites.PANEL_POPOUT_BUTTON
+        button.spriteID = pressed and states.mousedown or hovered and states.hovered or states.neutral
+    end
+    button:Subscribe(ui.Hook.ONMOUSEOVER, function()
+        hovered = true
+        showState()
+        return true
+    end)
+    button:Subscribe(ui.Hook.ONMOUSELEAVE, function()
+        hovered, pressed = false, false
+        showState()
+        return true
+    end)
+    button:Subscribe(ui.Hook.ONCLICK, function()
+        pressed = true
+        showState()
+        return false
+    end)
+    button:Subscribe(ui.Hook.ONRELEASE, function()
+        local activated = pressed
+        pressed = false
+        if activated then switchSettings(not Settings.settingsPoppedOut) end
+        showState()
+        return false
+    end)
+    showPageToggleState = showState
+    showState()
+    return button
+end
+
+local function closePage()
+    emptyPage()
+    if pluginPageToggle ~= nil then pcall(function() pluginPageToggle:Destroy() end) pluginPageToggle = nil end
+end
+
+-- The plugin's page in the client's Plugins window.
+local function buildPage(pluginLayer)
+    pluginPageLayer = pluginLayer
+    pluginPageToggle = buildPageToggle(pluginLayer)
+    fillPage(pluginLayer)
+end
+
 Event.ContentLayerReady.Subscribe("make_me_a_monster_content", function(event)
-    if pluginPage ~= nil then pcall(function() pluginPage.view:Destroy() end) pluginPage = nil end
+    closePage()
     local succeeded, errorMessage = pcall(buildPage, event.component)
     if not succeeded then print("[make_me_a_monster] could not build the page: " .. tostring(errorMessage)) end
 end)
@@ -470,14 +722,17 @@ openAllHeadsWindow = function()
             return ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
         end)
         if succeeded and pluginLayer ~= nil then
-            AllHeadsWindow.open(PrettyUI, pluginLayer, NpcDirectory.headsInNameOrder(visibleIds), Settings.chosenNpcID, function(npcID) chooseNpc(npcID) end,
-                NpcDirectory.nameOfNpc)
+            AllHeadsWindow.open(PrettyUI, pluginLayer, NpcDirectory.headsInNameOrder(visibleIds),
+                NpcDirectory.headsOfEachGroup(visibleIds), Settings.chosenNpcID, function(npcID, label)
+                    chooseNpc(npcID, nil, NpcDirectory.groupLabelled(npcID, label))
+                end,
+                NpcDirectory.nameOfNpc, NpcDirectory.nameForGroupOfNpc, NpcDirectory.headsMatching)
             refreshAnimationDropdown() -- (the animations for NPC heads, if the player's head is in use)
         else
             noticeText = "The game screen isn't ready."
         end
     end
-    if pluginPage then pluginPage.noticeText.content = noticeText end
+    if settingsControls then settingsControls.noticeText.content = noticeText end
 end
 
 -- Opens the debug window on every head left after the filtering (once the entries are made).
@@ -491,9 +746,7 @@ openHeadFlaggingWindow = function()
         end)
         if succeeded and pluginLayer ~= nil then
             local heads = {}
-            for _, npcGroup in ipairs(NpcDirectory.groups) do
-                for _, npcID in ipairs(visibleIds(npcGroup)) do heads[#heads + 1] = npcID end
-            end
+            for _, npcID in ipairs(NpcDirectory.headsInNameOrder(visibleIds)) do heads[#heads + 1] = npcID end
             table.sort(heads)
             HeadFlaggingWindow.scaleFor = Settings.headScaleMultiplier
             HeadFlaggingWindow.open(PrettyUI, pluginLayer, heads, NpcDirectory.nameOfNpc, function(npcID) return HeadSwap.npcHeadAnimation(npcID) end)
@@ -501,7 +754,7 @@ openHeadFlaggingWindow = function()
             noticeText = "The game screen isn't ready."
         end
     end
-    if pluginPage then pluginPage.noticeText.content = noticeText end
+    if settingsControls then settingsControls.noticeText.content = noticeText end
 end
 
 -- Debug: every animation in the game, each played on Hans (NPC id 0) in its own cell, in the debug window, with the
@@ -561,21 +814,21 @@ end
 -- continueAnimationBrowser), then opens the window.
 openAnimationFlaggingWindow = function()
     animationBrowserWanted = true
-    if pluginPage then pluginPage.noticeText.content = AnimationScan.done and "" or "Reading the game's animations..." end
+    if settingsControls then settingsControls.noticeText.content = AnimationScan.done and "" or "Reading the game's animations..." end
 end
 
 local function continueAnimationBrowser()
     if not animationBrowserWanted then return end
     if not AnimationScan.done then
         AnimationScan.step()
-        if pluginPage then
-            pluginPage.noticeText.content = "Reading the game's animations: " .. #AnimationScan.list .. " so far..."
+        if settingsControls then
+            settingsControls.noticeText.content = "Reading the game's animations: " .. #AnimationScan.list .. " so far..."
         end
         return
     end
     animationBrowserWanted = false
     local opened = showAnimationBrowser()
-    if pluginPage then pluginPage.noticeText.content = opened and "" or "The game screen isn't ready." end
+    if settingsControls then settingsControls.noticeText.content = opened and "" or "The game screen isn't ready." end
 end
 
 -- The player's version of the animation chosen now (else the player's evil laugh): what the debug windows' heads play,
@@ -593,7 +846,7 @@ openBlacklistedHeadsWindow = function()
         return ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
     end)
     if not (succeeded and pluginLayer ~= nil) then
-        if pluginPage then pluginPage.noticeText.content = "The game screen isn't ready." end
+        if settingsControls then settingsControls.noticeText.content = "The game screen isn't ready." end
         return
     end
     local Blacklist = require("src/data/head_blacklist")
@@ -662,7 +915,7 @@ openBlacklistedHeadsWindow = function()
             return lines
         end,
     })
-    if pluginPage then pluginPage.noticeText.content = "" end
+    if settingsControls then settingsControls.noticeText.content = "" end
 end
 
 -- Debug: every listed head, the newest models first (model ids are given out in order, so a head's highest model id
@@ -675,7 +928,7 @@ openNewestHeadsWindow = function()
         return ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
     end)
     if not (succeeded and pluginLayer ~= nil) or not NpcDirectory.regrouped then
-        if pluginPage then pluginPage.noticeText.content = "The game screen isn't ready." end
+        if settingsControls then settingsControls.noticeText.content = "The game screen isn't ready." end
         return
     end
     local HeadFilter = require("src/game/head_filter")
@@ -707,7 +960,34 @@ openNewestHeadsWindow = function()
             return lines
         end,
     })
-    if pluginPage then pluginPage.noticeText.content = "" end
+    if settingsControls then settingsControls.noticeText.content = "" end
+end
+
+-- Debug: every listed head sorted by its models, for grouping them by hand (src/debug/head_grouping_window.lua).
+openHeadGroupingWindow = function()
+    local pluginLayer = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
+    if pluginLayer == nil or not NpcDirectory.regrouped then
+        if settingsControls then settingsControls.noticeText.content = "The game screen isn't ready." end
+        return
+    end
+    HeadFlaggingWindow.scaleFor = Settings.headScaleMultiplier
+    HeadGroupingWindow.open(PrettyUI, pluginLayer, NpcDirectory.headsInNameOrder(visibleIds), NpcDirectory.nameOfNpc,
+        function(npcID) return HeadSwap.npcHeadAnimation(npcID) end)
+    if settingsControls then settingsControls.noticeText.content = "" end
+end
+
+-- Debug: the listed heads with exactly the same customisation logged as duplicates, for tools/apply_grouping_log.py.
+logExactDuplicates = function()
+    if not NpcDirectory.regrouped then
+        if settingsControls then settingsControls.noticeText.content = "The NPCs are still being read." end
+        return
+    end
+    local logged, total = HeadGroupingWindow.logExactDuplicates(NpcDirectory.headsInNameOrder(visibleIds),
+        NpcDirectory.nameOfNpc)
+    if settingsControls then
+        settingsControls.noticeText.content = logged >= total and ("All %d batches logged"):format(total)
+            or ("Logged %d of %d batches: paste them, then press again"):format(logged, total)
+    end
 end
 
 -- Debug: every listed head's name and model ids logged, packed several to a line (the console keeps about a thousand
@@ -718,7 +998,7 @@ local MODELS_PER_LINE = 10
 
 logListedHeadModels = function()
     if not NpcDirectory.regrouped then
-        if pluginPage then pluginPage.noticeText.content = "The NPCs are still being read." end
+        if settingsControls then settingsControls.noticeText.content = "The NPCs are still being read." end
         return
     end
     local HeadFilter = require("src/game/head_filter")
@@ -736,7 +1016,7 @@ logListedHeadModels = function()
             table.concat(records, "~", first + 1, math.min(#records, first + MODELS_PER_LINE))))
     end
     print("[make_me_a_monster] MODELS|end")
-    if pluginPage then pluginPage.noticeText.content = "Logged: paste the console and run tools/make_heads_models.py" end
+    if settingsControls then settingsControls.noticeText.content = "Logged: paste the console and run tools/make_heads_models.py" end
 end
 
 -- Debug: every listed head's name in the game (its configName), checked against id.NPC (the name must give the same id
@@ -747,7 +1027,7 @@ local NAMES_PER_LINE = 20
 
 logListedHeadNames = function()
     if not NpcDirectory.regrouped then
-        if pluginPage then pluginPage.noticeText.content = "The NPCs are still being read." end
+        if settingsControls then settingsControls.noticeText.content = "The NPCs are still being read." end
         return
     end
     local npcIDs, isLogged = {}, {}
@@ -778,8 +1058,8 @@ logListedHeadNames = function()
             table.concat(records, "~", first + 1, math.min(#records, first + NAMES_PER_LINE))))
     end
     print(("[make_me_a_monster] NPCNAMES|end|%d problems"):format(problems))
-    if pluginPage then
-        pluginPage.noticeText.content = ("Logged (%d problems): paste the console and run tools/name_listed_heads.py"):format(problems)
+    if settingsControls then
+        settingsControls.noticeText.content = ("Logged (%d problems): paste the console and run tools/name_listed_heads.py"):format(problems)
     end
 end
 
@@ -816,8 +1096,8 @@ logBlacklistConstants = function()
         print(("[make_me_a_monster] BLACKCONST|%d/%d|%s"):format(index, #blacklistLines, blacklistLines[index]))
     end
     local finished = lastLine >= #blacklistLines
-    if pluginPage then
-        pluginPage.noticeText.content = finished and "All logged: run tools/make_blacklist_constants.py"
+    if settingsControls then
+        settingsControls.noticeText.content = finished and "All logged: run tools/make_blacklist_constants.py"
             or ("Logged lines up to %d of %d: paste them, then press again"):format(lastLine, #blacklistLines)
     end
     blacklistNextLine = finished and 1 or lastLine + 1
@@ -853,6 +1133,7 @@ end)
 
 function PluginShutdown()
     Event.ContentLayerReady.Unsubscribe("make_me_a_monster_content")
+    closeSettingsWindow()
     Event.Draw.Unsubscribe("make_me_a_monster_draw")
     Event.GameStateChanged.Unsubscribe("make_me_a_monster_state")
     HeadSwap.stop()
@@ -860,5 +1141,5 @@ function PluginShutdown()
     AllHeadsWindow.close()
     HeadFlaggingWindow.close()
     Settings.save()
-    if pluginPage ~= nil then pcall(function() pluginPage.view:Destroy() end) pluginPage = nil end
+    closePage()
 end

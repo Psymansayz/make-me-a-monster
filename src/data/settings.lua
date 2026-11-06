@@ -24,6 +24,13 @@ Settings.variantsX = nil      -- where the variants window was left (its top lef
 Settings.variantsY = nil
 Settings.galleryX = nil       -- where the all-heads window was left, or nil
 Settings.galleryY = nil
+Settings.settingsX = nil      -- where the settings window was left, or nil
+Settings.settingsY = nil
+Settings.settingsPoppedOut = false -- the settings are in their own window, else on the plugin's page
+Settings.oneHeadPerGroup = true -- the all-heads window shows one head of each group, else every head
+Settings.variantsNpcID = nil -- the NPC chosen when the variants window was last open, or nil
+Settings.variantsGroup = nil -- which group of it the window showed (VariantsWindow's text for it), or nil
+Settings.variantsPage = nil  -- the page it was left on, or nil
 
 -- A saved integer that isn't negative, or nil.
 local function savedInteger(settingKey)
@@ -32,7 +39,7 @@ local function savedInteger(settingKey)
 end
 
 -- The NPC whose head was chosen, or nil. Saved by name, and by id for a head whose name is not known yet (one saved by
--- id only, and not chosen again before the plugin's page was opened); "" with -1 for none.
+-- id only, and not chosen again before the settings window was opened); "" with -1 for none.
 local function savedNpc()
     local npcName = PersistentDB:GetString("npcName")
     if npcName ~= nil and npcName ~= "" then return GameIds.resolve("NPC", npcName) end
@@ -60,6 +67,13 @@ function Settings.load()
     Settings.galleryWidth, Settings.galleryHeight = savedInteger("galleryWidth"), savedInteger("galleryHeight")
     Settings.variantsX, Settings.variantsY = savedInteger("variantsX"), savedInteger("variantsY")
     Settings.galleryX, Settings.galleryY = savedInteger("galleryX"), savedInteger("galleryY")
+    Settings.settingsX, Settings.settingsY = savedInteger("settingsX"), savedInteger("settingsY")
+    Settings.settingsPoppedOut = savedInteger("settingsPoppedOut") == 1
+    Settings.oneHeadPerGroup = savedInteger("oneHeadPerGroup") ~= 0
+    local variantsNpcName = PersistentDB:GetString("variantsNpcName")
+    Settings.variantsNpcID = variantsNpcName and variantsNpcName ~= "" and GameIds.resolve("NPC", variantsNpcName) or nil
+    Settings.variantsGroup = PersistentDB:GetString("variantsGroup")
+    Settings.variantsPage = savedInteger("variantsPage")
 end
 
 -- Written when the plugin shuts down (the settings are only kept in memory until then).
@@ -77,6 +91,13 @@ function Settings.save()
     PersistentDB:SetInt("variantsY", Settings.variantsY or -1)
     PersistentDB:SetInt("galleryX", Settings.galleryX or -1)
     PersistentDB:SetInt("galleryY", Settings.galleryY or -1)
+    PersistentDB:SetInt("settingsX", Settings.settingsX or -1)
+    PersistentDB:SetInt("settingsY", Settings.settingsY or -1)
+    PersistentDB:SetInt("settingsPoppedOut", Settings.settingsPoppedOut and 1 or 0)
+    PersistentDB:SetInt("oneHeadPerGroup", Settings.oneHeadPerGroup and 1 or 0)
+    PersistentDB:SetString("variantsNpcName", Settings.variantsNpcID and GameIds.nameOf("NPC", Settings.variantsNpcID) or "")
+    PersistentDB:SetString("variantsGroup", Settings.variantsGroup or "")
+    PersistentDB:SetInt("variantsPage", Settings.variantsPage or -1)
 end
 
 -- The head size as the slider shows it (50 to 300, how many percent of the normal size), and its setter, which works

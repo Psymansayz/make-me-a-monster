@@ -11,11 +11,16 @@
 -- destroys every part of every cell itself, one by one, the models first, before its layers and the window.
 --
 -- HeadGrid.open(PrettyUI, parent, options) -> the grid, or nil. options: title; columns, rows; ids; current;
---   minWidth; savedWidth/Height/X/Y; withSearch; nameOf(id); isPlayerHead(id); animationFor(id);
---   pageLabel(page, pages, shown); onPick(id); onSearch(text); onPlacement(width, height, x, y); onClosed().
--- grid:setHeads(ids, current, title); grid:updateAnimations(); grid:refreshHeadSize(); grid:close().
+--   minWidth; savedWidth/Height/X/Y; page (else the page of the head in use); withSearch;
+--   toggle = { text, selected, onChange(selected) } (a check box, with withSearch);
+--   extraButton = { text, onClick() } (a button after Next, without withSearch: no text, no button); nameOf(id);
+--   isPlayerHead(id); animationFor(id); pageLabel(page, pages, shown); onPick(id); onSearch(text);
+--   onPlacement(width, height, x, y); onClosed().
+-- grid:setHeads(ids, current, title, keepPage); grid:setExtraButton(text); grid:updateAnimations();
+-- grid:refreshHeadSize(); grid:close().
 
 local Settings = require("src/data/settings")
+local HeadSizes = require("src/game/head_sizes")
 
 local HeadGrid = {}
 HeadGrid.__index = HeadGrid
@@ -23,6 +28,7 @@ HeadGrid.__index = HeadGrid
 local PAD, GAP = 8, 6
 local NAV_HEIGHT = 36
 local NAV_BUTTON = 80
+local NAV_TOGGLE = 130 -- (a check box and its label)
 local LABELS_HEIGHT = 40 -- the name and the id under a head: two 16-high lines, 38 and 20 up from the cell's bottom
 local START_CELL_W, START_CELL_H = 150, 170 -- a cell when a window opens without a saved size
 local MIN_CELL_W, MIN_CELL_H = 90, 110      -- and the least a window can be resized to
@@ -91,9 +97,10 @@ function HeadGrid:placeCell(cell, g)
         cell.headSize = headSize
         cell.model:SetSize(headSize, headSize)
     end
-    -- (the head is drawn larger by moving the camera closer: the windows' own scale, and the head size setting on top)
-    local viewDistance = math.max(1,
-        math.floor(BASE_VIEW * BASE_SIZE / headSize / WINDOW_HEAD_SCALE / Settings.headScaleMultiplier()))
+    -- (the head is drawn larger by moving the camera closer: the windows' own scale, the head size setting on top, and
+    -- the head's own size)
+    local viewDistance = math.max(1, math.floor(BASE_VIEW * BASE_SIZE / headSize / WINDOW_HEAD_SCALE
+        / Settings.headScaleMultiplier() / HeadSizes.of(cell.id)))
     if cell.viewDistance ~= viewDistance then
         cell.viewDistance = viewDistance
         cell.model.viewDistance = viewDistance
@@ -106,33 +113,49 @@ function HeadGrid:placeCell(cell, g)
     cell.click:SetSize(g.cellW, g.cellH)
 end
 
--- The bottom row put in its place. With a search: the buttons, the boxes and the label after them. Without: Previous
--- at the left, Next at the right, the label centred between them.
+-- The bottom row put in its place, from the left: Previous, Next, the boxes if there is a search, and the label after
+-- them. The extra button at the right.
 function HeadGrid:placeNavigation(g)
     local y = g.originY + g.gridH + 4
     local nav = self.nav
     nav.previous.root:SetPos(PAD, y + 2)
+    nav.after.root:SetPos(PAD + NAV_BUTTON + 6, y + 2)
     if nav.search then
-        nav.after.root:SetPos(PAD + NAV_BUTTON + 6, y + 2)
         nav.search.root:SetPos(PAD + 180, y + 2)
         nav.jump.root:SetPos(PAD + 392, y + 2)
-        nav.label:SetPos(PAD + 470, y + 8)
-        nav.label:SetSize(math.max(1, g.width - PAD * 2 - 470), 20)
+        local labelX = 470
+        if nav.toggle then
+            nav.toggle.root:SetPos(PAD + labelX, y + 6)
+            labelX = labelX + NAV_TOGGLE
+        end
+        nav.label:SetPos(PAD + labelX, y + 8)
+        nav.label:SetSize(math.max(1, g.width - PAD * 2 - labelX), 20)
     else
-        nav.after.root:SetPos(g.width - PAD - NAV_BUTTON, y + 2)
-        local labelX = PAD + NAV_BUTTON + 6
+        local labelX, labelEnd = PAD + (NAV_BUTTON + 6) * 2, g.width - PAD
+        if nav.extra and not nav.extra.root.hidden then
+            labelEnd = labelEnd - self.extraWidth
+            nav.extra.root:SetPos(labelEnd, y + 2)
+            labelEnd = labelEnd - 6
+        end
         nav.label:SetPos(labelX, y + 8)
-        nav.label:SetSize(math.max(1, g.width - labelX * 2), 20)
+        nav.label:SetSize(math.max(1, labelEnd - labelX), 20)
     end
 end
 
-function HeadGrid:layout()
+-- Everything put in its place, where it is in the stack of windows.
+function HeadGrid:place()
     local g = self:geometry()
     -- (where the content is on the plugin layer: the heads and the labels, in layers there, are placed from it)
     local root = self.window.root
     g.offsetX, g.offsetY = root.x + BORDERS / 2, root.y + TITLE_AND_BOTTOM - BORDERS / 2
     for _, cell in ipairs(self.cells) do self:placeCell(cell, g) end
     self:placeNavigation(g)
+end
+
+-- Placed, and brought forward with the window. The layers are beside the window, not in it, so anything else that
+-- raised them (a page, the head size) would put a window's heads over a window in front of it.
+function HeadGrid:layout()
+    self:place()
     self.headsLayer:MoveToFront()
     self.labelsLayer:MoveToFront()
 end
@@ -223,19 +246,33 @@ function HeadGrid:showPage()
         if npcID == nil then emptyCell(cell) else self:fillCell(cell, npcID) end
     end
     self.nav.label.content = self.pageLabel(self.page, self.pages, #self.ids)
-    self:layout()
+    self:place()
     -- (Previous and Next only where there is a page to go to)
     self.nav.previous.root.hidden = self.page <= 1
     self.nav.after.root.hidden = self.page >= self.pages
 end
 
--- Other heads shown (the page of the one in use first), and a title if given.
-function HeadGrid:setHeads(ids, current, title)
+-- Other heads shown (the page of the one in use first, or with keepPage the page shown now, or the last if there are
+-- fewer), and a title if given.
+function HeadGrid:setHeads(ids, current, title, keepPage)
     self.ids, self.current = ids, current
     self.pages = math.max(1, math.ceil(#ids / self.pageSize))
-    self.page = pageOf(ids, current, self.pageSize)
+    if not keepPage then self.page = pageOf(ids, current, self.pageSize) end
     if title ~= nil then self.window:SetTitle(title) end
     self:showPage()
+end
+
+-- The extra button says this, at the width the text needs; no text, no button.
+function HeadGrid:setExtraButton(text)
+    local button = self.nav.extra
+    if button == nil then return end
+    button.root.hidden = text == nil
+    if text ~= nil then
+        button.content.content = text
+        self.extraWidth = self.simpleButton.getSize(text)
+        button.root:SetSize(self.extraWidth, button.root.height)
+    end
+    self:place()
 end
 
 function HeadGrid:changePage(pageChange)
@@ -263,7 +300,7 @@ end
 
 -- The head size was changed (the slider): the heads are drawn at the new size.
 function HeadGrid:refreshHeadSize()
-    self:layout()
+    self:place()
 end
 
 -- What the window leaves behind when it closes, however it was closed: its place reported, the heads let go.
@@ -303,7 +340,7 @@ function HeadGrid.open(PrettyUI, parent, options)
         onSearch = options.onSearch,
         onPlacement = options.onPlacement or function() end,
         onClosed = options.onClosed or function() end,
-        cells = {}, nav = {}, closed = false,
+        cells = {}, nav = {}, closed = false, page = options.page, simpleButton = PrettyUI.SimpleButton,
     }, HeadGrid)
     -- The size: as it was left, else the default; kept on the screen and no smaller than it can be resized to.
     local minWidth, minHeight = frameSize(self.columns, self.rows, MIN_CELL_W, MIN_CELL_H)
@@ -384,12 +421,27 @@ function HeadGrid.open(PrettyUI, parent, options)
             end,
         })
     end
+    if options.extraButton then
+        nav.extra = PrettyUI.SimpleButton.new(content, "", function()
+            if not self.closed then options.extraButton.onClick() end
+        end)
+        nav.extra.root.hidden = true -- (until it has a text, and so a width)
+    end
+    if options.toggle then
+        nav.toggle = PrettyUI.CheckboxButton.new(content,
+            { { text = options.toggle.text, value = true, selected = options.toggle.selected } }, {
+                width = NAV_TOGGLE,
+                onChange = function(_, _, _, selected)
+                    if not self.closed then options.toggle.onChange(selected) end
+                end,
+            })
+    end
     nav.label = ui.Text.new(content)
     nav.label.maxLines = 1
     nav.label.font = id.Font.MUSEO_SANS_11PT_REGULAR
     nav.label.rgba = TEXT_LIGHT
-    if not options.withSearch then nav.label.alignHorizontal = ui.AlignMode.CENTRE end
-    self:setHeads(options.ids, options.current)
+    self:setHeads(options.ids, options.current, nil, options.page ~= nil)
+    if options.extraButton then self:setExtraButton(options.extraButton.text) end
     -- The window's SetSize caught: the cells placed at once for the new size, as PrettyUI keeps it within the limits.
     local setWindowSize = self.window.SetSize
     self.window.SetSize = function(window, newWidth, newHeight)

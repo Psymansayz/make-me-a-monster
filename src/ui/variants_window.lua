@@ -1,7 +1,11 @@
--- The "variants" window: the heads of every NPC sharing the chosen one's name, in a 3x3 grid (src/ui/head_grid.lua);
--- with the player's own head in use, just that head (VariantsWindow.PLAYER_HEAD_ID).
--- VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPick, labelFor) opens the window or gives the
--- open one these heads; close(); isOpen(); updateAnimations(); refreshHeadSize().
+-- The "variants" window: the heads of a group of the NPC chosen, in a 3x3 grid (src/ui/head_grid.lua), and a button to
+-- its next group if it is in several; with the player's own head in use, just that head
+-- (VariantsWindow.PLAYER_HEAD_ID).
+-- VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPick, labelFor, view) opens the window or gives
+-- the open one these heads. view = { page, buttonText, onButton }: the page (else that of the head in use), and the
+-- button's. firstView(npcID, groups); remember(npcID, npcGroup); selectGroup(npcID, npcGroup); setButton(text);
+-- close(); isOpen();
+-- updateAnimations(); refreshHeadSize().
 
 local Settings = require("src/data/settings")
 local HeadGrid = require("src/ui/head_grid")
@@ -13,6 +17,48 @@ VariantsWindow.animationForPlayerHead = nil -- function() -> the animation id th
 VariantsWindow.PLAYER_HEAD_ID = -1 -- the id standing for the player's own head (as the game's, for the local player)
 
 local grid = nil -- the HeadGrid while the window is open
+local onButton = nil -- what the button under the heads does
+local groupJustSelected = false -- a head was selected under a group's name: the page last open no longer counts
+
+local MIN_WIDTH = 640 -- (room for Previous, Next, the longest button text and the page label in the bottom row)
+
+-- A group as saved: several can have one name, which of the head's groups it is then goes by its size too.
+local function savedGroupOf(npcGroup)
+    return npcGroup.name .. "|" .. #npcGroup.ids
+end
+
+-- What the window opens on for this NPC, of its groups (the smallest first): the group it was just selected under, on
+-- the page of the head; else the group and the page last open if this NPC was the one chosen then; else the smallest
+-- group, on the page of the head.
+function VariantsWindow.firstView(npcID, groups)
+    local justSelected = groupJustSelected
+    groupJustSelected = false
+    if npcID == Settings.variantsNpcID then
+        for _, npcGroup in ipairs(groups) do
+            if savedGroupOf(npcGroup) == Settings.variantsGroup then
+                if justSelected then return npcGroup, nil end
+                return npcGroup, grid and grid.page or Settings.variantsPage
+            end
+        end
+    end
+    return groups[1], nil
+end
+
+-- This NPC was selected under this group's name: the window opens on it next.
+function VariantsWindow.selectGroup(npcID, npcGroup)
+    VariantsWindow.remember(npcID, npcGroup)
+    Settings.variantsPage, groupJustSelected = nil, true
+end
+
+-- The NPC chosen and the group shown, for the next time the window opens.
+function VariantsWindow.remember(npcID, npcGroup)
+    Settings.variantsNpcID, Settings.variantsGroup = npcID, savedGroupOf(npcGroup)
+end
+
+-- What the button says; no text, no button.
+function VariantsWindow.setButton(text)
+    if grid then grid:setExtraButton(text) end
+end
 
 local function isPlayerHead(npcID)
     return npcID == VariantsWindow.PLAYER_HEAD_ID
@@ -39,17 +85,22 @@ function VariantsWindow.close()
     if grid then grid:close() end
 end
 
-function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPick, labelFor)
+function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPick, labelFor, view)
+    view = view or {}
+    onButton = view.onButton
     local function nameOf(npcID) return labelFor and labelFor(npcID) or nil end
     -- Already open: the window shows these variants instead (its cells are reused, as for a page change).
     if grid then
         grid.onPick, grid.nameOf = onPick, nameOf
-        grid:setHeads(variantIDs, current, title)
+        grid.page = view.page or grid.page
+        grid:setHeads(variantIDs, current, title, view.page ~= nil)
+        grid:setExtraButton(view.buttonText)
         return true
     end
     grid = HeadGrid.open(PrettyUI, parent, {
-        title = title, columns = 3, rows = 3,
-        ids = variantIDs, current = current,
+        title = title, columns = 3, rows = 3, minWidth = MIN_WIDTH,
+        ids = variantIDs, current = current, page = view.page,
+        extraButton = { text = view.buttonText, onClick = function() if onButton then onButton() end end },
         savedWidth = Settings.variantsWidth, savedHeight = Settings.variantsHeight,
         savedX = Settings.variantsX, savedY = Settings.variantsY,
         nameOf = nameOf, isPlayerHead = isPlayerHead, animationFor = animationFor,
@@ -61,7 +112,11 @@ function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPic
             Settings.variantsWidth, Settings.variantsHeight = width, height
             Settings.variantsX, Settings.variantsY = x, y
         end,
-        onClosed = function() grid = nil end,
+        onClosed = function()
+            -- (with the player's own head in use, the page is not that of the NPC remembered)
+            if Settings.chosenNpcID ~= nil then Settings.variantsPage = grid.page end
+            grid = nil
+        end,
     })
     return grid ~= nil
 end
