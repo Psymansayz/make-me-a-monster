@@ -7,10 +7,10 @@ local NpcDirectory = {}
 NpcDirectory.list = {}      -- { id, name, label, search }, in id order
 NpcDirectory.groups = {}    -- one per distinct name, in order of first appearance: { name, ids = { id... }, search }
 local groupByName = {} -- name -> group
-local groupByNpcID = {}   -- id -> group (the smallest it is in: a head can be in several)
+local groupByNpcID = {}      -- id -> group (the smallest it is in: a head can be in several)
 local shownGroupByNpcID = {} -- id -> the group it is the head shown for
-local groupsByNpcID = {} -- id -> every group it is in, the smallest first
-local nameByNpcID = {}      -- id -> name
+local groupsByNpcID = {}     -- id -> every group it is in, the smallest first, for a head in several only
+local memberByNpcID = {}     -- id -> the member it is in (by its name: a head in several groups has one name)
 NpcDirectory.done = false   -- every config read
 NpcDirectory.scanned = 0    -- ids tried so far
 
@@ -62,8 +62,7 @@ addPlainLetters("ýÿŷÝŸŶ", "y")
 addPlainLetters("źżžŹŻŽ", "z")
 
 -- The text with each letter beyond ASCII replaced by its plain letter number `choice` (the last if it has fewer).
-function NpcDirectory.withPlainLetters(inputText, choice)
-    choice = choice or 1
+local function withPlainLetters(inputText, choice)
     return (inputText:gsub("[\194-\244][\128-\191]*", function(character)
         local plainLetters = PLAIN_LETTERS[character]
         return plainLetters and (plainLetters[choice] or plainLetters[#plainLetters]) or nil
@@ -72,10 +71,10 @@ end
 
 local MOST_CHOICES = 3
 
-function NpcDirectory.allPlainReadings(inputText)
+local function allPlainReadings(inputText)
     local readings, alreadySeenReadings = {}, {}
     for choice = 1, MOST_CHOICES do
-        local folded = NpcDirectory.withPlainLetters(inputText, choice)
+        local folded = withPlainLetters(inputText, choice)
         if not alreadySeenReadings[folded] then
             alreadySeenReadings[folded] = true
             readings[#readings + 1] = folded
@@ -84,14 +83,17 @@ function NpcDirectory.allPlainReadings(inputText)
     return readings
 end
 
--- The text in lower case, as it is, followed by each way it reads made plain: what searches look in.
-function NpcDirectory.searchableText(inputText)
-    return NpcDirectory.lowerCaseAscii(inputText) .. " " .. NpcDirectory.lowerCaseAscii(table.concat(NpcDirectory.allPlainReadings(inputText), " "))
-end
-
 -- string.lower can change bytes of a UTF-8 letter beyond ASCII under some locales: so the letters A to Z only.
 function NpcDirectory.lowerCaseAscii(inputText)
     return (inputText:gsub("[A-Z]", function(character) return character:lower() end))
+end
+
+-- What searches look in: the text in lower case, followed by each way it reads made plain if it has letters beyond
+-- ASCII.
+local function searchableText(inputText)
+    local lowered = NpcDirectory.lowerCaseAscii(inputText)
+    if not inputText:find("[\128-\255]") then return lowered end
+    return lowered .. " " .. NpcDirectory.lowerCaseAscii(table.concat(allPlainReadings(inputText), " "))
 end
 
 -- NPCs without a real name (some quest stand-ins) carry the placeholder "null".
@@ -117,19 +119,16 @@ function NpcDirectory.step()
             if name ~= nil then
                 local label = name .. " (" .. npcID .. ")"
                 local lower = NpcDirectory.lowerCaseAscii(name)
-                nameByNpcID[npcID] = name
-                list[#list + 1] = { id = npcID, name = name, label = label,
-                    search = NpcDirectory.searchableText(label) }
+                list[#list + 1] = { id = npcID, name = name, label = label }
                 -- Names that differ only by case are one entry (listed as the first one read).
                 local npcGroup = groupByName[lower]
                 if npcGroup == nil then
-                    npcGroup = { name = name, ids = {}, search = NpcDirectory.searchableText(name) }
+                    npcGroup = { name = name, ids = {} }
                     groupByName[lower] = npcGroup
                     NpcDirectory.groups[#NpcDirectory.groups + 1] = npcGroup
                 end
                 npcGroup.ids[#npcGroup.ids + 1] = npcID
-                npcGroup.search = npcGroup.search .. " " .. npcID
-                groupByNpcID[npcID] = npcGroup
+                groupByNpcID[npcID], memberByNpcID[npcID] = npcGroup, npcGroup
             end
         else
             misses = misses + 1
@@ -165,21 +164,21 @@ end
 -- A group whose first NPC the game no longer knows takes another head, the smallest such group first, so that every
 -- group keeps a head of its own.
 function NpcDirectory.loadBaked(listedHeadsData)
-    NpcDirectory.groups, groupByNpcID, shownGroupByNpcID, groupsByNpcID, nameByNpcID = {}, {}, {}, {}, {}
+    NpcDirectory.groups, groupByNpcID, shownGroupByNpcID, groupsByNpcID, memberByNpcID = {}, {}, {}, {}, {}
     local groupsToChoose = {}
-    for _, savedGroup in ipairs(listedHeadsData.groups or {}) do
+    for _, savedGroup in ipairs(listedHeadsData.groups) do
         local npcIDs, members, firstIsKnown = {}, {}, false
-        for _, member in ipairs(savedGroup.members) do
-            local memberIDs = {}
-            for _, npcName in ipairs(member[2]) do
+        for memberIndex, savedMember in ipairs(savedGroup.members) do
+            local member = { name = savedMember[1], ids = {} }
+            for nameIndex, npcName in ipairs(savedMember[2]) do
                 local npcID = GameIds.resolve("NPC", npcName)
                 if npcID ~= nil then
-                    memberIDs[#memberIDs + 1], npcIDs[#npcIDs + 1] = npcID, npcID
-                    nameByNpcID[npcID] = member[1]
-                    firstIsKnown = firstIsKnown or npcName == savedGroup.members[1][2][1]
+                    member.ids[#member.ids + 1], npcIDs[#npcIDs + 1] = npcID, npcID
+                    memberByNpcID[npcID] = member
+                    if memberIndex == 1 and nameIndex == 1 then firstIsKnown = true end
                 end
             end
-            if #memberIDs > 0 then members[#members + 1] = { name = member[1], ids = memberIDs } end
+            if #member.ids > 0 then members[#members + 1] = member end
         end
         if #npcIDs > 0 then
             local npcGroup = { name = savedGroup.name, ids = npcIDs, members = members }
@@ -190,10 +189,13 @@ function NpcDirectory.loadBaked(listedHeadsData)
                 groupsToChoose[#groupsToChoose + 1] = npcGroup
             end
             for _, npcID in ipairs(npcIDs) do
-                local otherGroup = groupByNpcID[npcID]
-                if otherGroup == nil or #npcIDs < #otherGroup.ids then groupByNpcID[npcID] = npcGroup end
-                groupsByNpcID[npcID] = groupsByNpcID[npcID] or {}
-                table.insert(groupsByNpcID[npcID], npcGroup)
+                local firstGroup = groupByNpcID[npcID]
+                if firstGroup == nil then
+                    groupByNpcID[npcID] = npcGroup
+                else
+                    groupsByNpcID[npcID] = groupsByNpcID[npcID] or { firstGroup }
+                    table.insert(groupsByNpcID[npcID], npcGroup)
+                end
             end
         end
     end
@@ -206,11 +208,12 @@ function NpcDirectory.loadBaked(listedHeadsData)
             return a < b
         end)
     end
-    for _, groups in pairs(groupsByNpcID) do
+    for npcID, groups in pairs(groupsByNpcID) do
         table.sort(groups, function(a, b)
             if #a.ids ~= #b.ids then return #a.ids < #b.ids end
             return a.ids[1] < b.ids[1]
         end)
+        groupByNpcID[npcID] = groups[1]
     end
     NpcDirectory.baked, NpcDirectory.done, NpcDirectory.regrouped = true, true, true
 end
@@ -220,48 +223,77 @@ local function membersOf(npcGroup)
     return npcGroup.members or { npcGroup }
 end
 
-local function searchOfMember(member)
-    if member.search == nil then
-        member.search = NpcDirectory.searchableText(member.name) .. " " .. table.concat(member.ids, " ")
-    end
-    return member.search
+-- A query's words never hold a space: so a word is found in one of a name's texts or another, never across them.
+
+local function searchNameOf(named) -- a group or a member
+    if named.searchName == nil then named.searchName = searchableText(named.name) end
+    return named.searchName
 end
 
--- A group's own name is searched too: no member may have it (Gorajo).
-local function searchOf(npcGroup)
-    if npcGroup.search == nil then
-        local searchParts = { NpcDirectory.searchableText(npcGroup.name) }
-        for _, member in ipairs(membersOf(npcGroup)) do searchParts[#searchParts + 1] = searchOfMember(member) end
-        npcGroup.search = table.concat(searchParts, " ")
-    end
-    return npcGroup.search
-end
-
-local function wordsOfQuery(query)
-    local queryWords = {}
-    for queryWord in NpcDirectory.lowerCaseAscii(tostring(query or "")):gmatch("%S+") do queryWords[#queryWords + 1] = queryWord end
-    return queryWords
-end
-
-local function containsEveryWord(text, queryWords)
+local function nameHolds(named, queryWords)
     for _, queryWord in ipairs(queryWords) do
-        if not text:find(queryWord, 1, true) then return false end
+        if not searchNameOf(named):find(queryWord, 1, true) then return false end
     end
     return true
+end
+
+local function idsTextOf(member)
+    if member.idsText == nil then member.idsText = table.concat(member.ids, " ") end
+    return member.idsText
+end
+
+local function memberHoldsWord(member, queryWord)
+    return searchNameOf(member):find(queryWord, 1, true) ~= nil or idsTextOf(member):find(queryWord, 1, true) ~= nil
+end
+
+local function memberHolds(member, queryWords)
+    for _, queryWord in ipairs(queryWords) do
+        if not memberHoldsWord(member, queryWord) then return false end
+    end
+    return true
+end
+
+-- A group's own name is searched too: no member may have it.
+local function groupHoldsWord(npcGroup, queryWord)
+    if searchNameOf(npcGroup):find(queryWord, 1, true) then return true end
+    for _, member in ipairs(membersOf(npcGroup)) do
+        if memberHoldsWord(member, queryWord) then return true end
+    end
+    return false
+end
+
+local function groupHolds(npcGroup, queryWords)
+    for _, queryWord in ipairs(queryWords) do
+        if not groupHoldsWord(npcGroup, queryWord) then return false end
+    end
+    return true
+end
+
+-- One head of a member: by the member's name or that head's own id.
+local function headHolds(member, npcID, queryWords)
+    local idText = tostring(npcID)
+    for _, queryWord in ipairs(queryWords) do
+        if not searchNameOf(member):find(queryWord, 1, true) and not idText:find(queryWord, 1, true) then
+            return false
+        end
+    end
+    return true
+end
+
+function NpcDirectory.wordsOfQuery(query)
+    local queryWords = {}
+    for queryWord in NpcDirectory.lowerCaseAscii(query):gmatch("%S+") do queryWords[#queryWords + 1] = queryWord end
+    return queryWords
 end
 
 -- The members holding every word, the shortest names first: "Goblin" before "Goblin guard".
 local function membersHolding(npcGroup, queryWords)
     local members = {}
     for _, member in ipairs(membersOf(npcGroup)) do
-        if containsEveryWord(searchOfMember(member), queryWords) then members[#members + 1] = member end
+        if memberHolds(member, queryWords) then members[#members + 1] = member end
     end
     table.sort(members, function(a, b) return #a.name < #b.name end)
     return members
-end
-
-local function headHolds(member, npcID, queryWords)
-    return containsEveryWord(NpcDirectory.searchableText(member.name) .. " " .. npcID, queryWords)
 end
 
 -- A head of these members that nothing shows yet, one that holds the words if there is one; or nil.
@@ -286,7 +318,7 @@ function NpcDirectory.headsMatching(shownHeads, queryWords)
     for _, shownID in ipairs(shownHeads) do
         local npcGroup = NpcDirectory.groupOfNpc(shownID)
         local member = NpcDirectory.memberOfNpc(shownID, npcGroup)
-        if containsEveryWord(NpcDirectory.lowerCaseAscii(npcGroup.name), queryWords) then
+        if nameHolds(npcGroup, queryWords) then
             heads[#heads + 1], nameOfHead[shownID] = shownID, npcGroup.name
         elseif headHolds(member, shownID, queryWords) then
             heads[#heads + 1], nameOfHead[shownID] = shownID, member.name
@@ -299,23 +331,34 @@ function NpcDirectory.headsMatching(shownHeads, queryWords)
         local npcID, name = freeHeadOf(members, queryWords, nameOfHead)
         if npcID ~= nil then heads[#heads + 1], nameOfHead[npcID] = npcID, name end
     end
+    local sortName = {}
+    for _, npcID in ipairs(heads) do sortName[npcID] = NpcDirectory.lowerCaseAscii(nameOfHead[npcID]) end
     table.sort(heads, function(a, b)
-        local nameA, nameB = NpcDirectory.lowerCaseAscii(nameOfHead[a]), NpcDirectory.lowerCaseAscii(nameOfHead[b])
-        if nameA ~= nameB then return nameA < nameB end
+        if sortName[a] ~= sortName[b] then return sortName[a] < sortName[b] end
         return a < b
     end)
     return heads, nameOfHead
 end
 
+-- The heads, each with its own name and id, holding every word.
+function NpcDirectory.headsHolding(heads, queryWords)
+    local matching = {}
+    for _, npcID in ipairs(heads) do
+        if headHolds(memberByNpcID[npcID], npcID, queryWords) then matching[#matching + 1] = npcID end
+    end
+    return matching
+end
+
+
 -- The shortest member holding every word of the query, for the dropdown to show, and how many NPCs match in all.
 -- Nil if the query is blank, is the group's own name, or its words are spread over different names.
 function NpcDirectory.memberMatching(npcGroup, query)
-    local queryWords = wordsOfQuery(query)
+    local queryWords = NpcDirectory.wordsOfQuery(query)
     if #queryWords == 0 then return nil end
     if table.concat(queryWords, " ") == NpcDirectory.lowerCaseAscii(npcGroup.name) then return nil end
     local best, matchingNpcCount = nil, 0
     for _, member in ipairs(membersOf(npcGroup)) do
-        if containsEveryWord(searchOfMember(member), queryWords) then
+        if memberHolds(member, queryWords) then
             matchingNpcCount = matchingNpcCount + #member.ids
             if best == nil or #member.name < #best.name then best = member end
         end
@@ -365,13 +408,14 @@ function NpcDirectory.find(npcID)
 end
 
 function NpcDirectory.nameOfNpc(npcID)
-    return nameByNpcID[npcID]
+    local member = memberByNpcID[npcID]
+    return member and member.name
 end
 
 -- A head standing for its group goes by the group's name: a race or job group's head has its own (Andil, in Goblin).
 function NpcDirectory.nameForGroupOfNpc(npcID)
     local npcGroup = shownGroupByNpcID[npcID]
-    return npcGroup and npcGroup.name or nameByNpcID[npcID]
+    return npcGroup and npcGroup.name or NpcDirectory.nameOfNpc(npcID)
 end
 
 -- A head in several groups belongs to the one it is the head shown for, else the smallest.
@@ -416,16 +460,9 @@ function NpcDirectory.memberOfNpc(npcID, npcGroup)
     return nil
 end
 
--- The dropdown's label for a group: its name, and how many variants it has if more than one.
-function NpcDirectory.labelOfGroup(npcGroup, variantCount)
-    variantCount = variantCount or #npcGroup.ids
-    return variantCount > 1 and (npcGroup.name .. " (" .. variantCount .. " variants)") or npcGroup.name
-end
-
--- The same for one name of a group (a member).
-function NpcDirectory.labelOfMember(member, variantCount)
-    variantCount = variantCount or #member.ids
-    return variantCount > 1 and (member.name .. " (" .. variantCount .. " variants)") or member.name
+-- The dropdown's label for a group or a member: its name, and how many variants it has if more than one.
+function NpcDirectory.labelOf(name, variantCount)
+    return variantCount > 1 and (name .. " (" .. variantCount .. " variants)") or name
 end
 
 -- Merging names into entries -------------------------------------------------------------------------------
@@ -581,19 +618,18 @@ function NpcDirectory.regroup(keep)
 
     local final = {}
     for _, made in ipairs(grouped) do
-        local npcIDs, names, entries, search = {}, {}, {}, {}
+        local npcIDs, names, entries = {}, {}, {}
         for _, index in ipairs(made.members) do
             for _, entry in ipairs(items[index].members) do
                 entries[#entries + 1] = entry
                 names[#names + 1] = entry.name
-                search[#search + 1] = entry.search
                 for _, npcID in ipairs(entry.ids) do npcIDs[#npcIDs + 1] = npcID end
             end
         end
         table.sort(npcIDs)
         final[#final + 1] = {
             name = (made.word and GROUP_NAMES[made.word]) or (#names == 1 and names[1]) or sharedName(names),
-            ids = npcIDs, members = entries, search = table.concat(search, " "), anchor = made.word,
+            ids = npcIDs, members = entries, anchor = made.word,
         }
     end
     table.sort(final, function(a, b) return a.ids[1] < b.ids[1] end)
@@ -608,10 +644,11 @@ end
 
 -- Up to `maxResults` groups whose name or ids contain every word of the query.
 function NpcDirectory.searchGroups(query, maxResults, visibleIds)
-    local queryWords = wordsOfQuery(query)
+    local queryWords = NpcDirectory.wordsOfQuery(query)
     local matchingGroups = {}
     for _, npcGroup in ipairs(NpcDirectory.groups) do
-        if containsEveryWord(searchOf(npcGroup), queryWords) and (visibleIds == nil or #visibleIds(npcGroup) > 0) then
+        if (#queryWords == 0 or groupHolds(npcGroup, queryWords))
+            and (visibleIds == nil or #visibleIds(npcGroup) > 0) then
             matchingGroups[#matchingGroups + 1] = npcGroup
             if #matchingGroups >= maxResults then break end
         end

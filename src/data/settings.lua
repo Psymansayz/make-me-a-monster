@@ -32,26 +32,21 @@ local function savedInteger(settingKey)
     return savedValue ~= nil and savedValue >= 0 and savedValue or nil
 end
 
--- The NPC whose head was chosen
-local function savedNpc()
-    local npcName = PersistentDB:GetString("npcName")
-    if npcName ~= nil and npcName ~= "" then return GameIds.resolve("NPC", npcName) end
-    return savedInteger("npcID")
+-- An NPC saved by its name in the game, or nil.
+local function savedNpc(settingKey)
+    local npcName = PersistentDB:GetString(settingKey)
+    return npcName ~= nil and npcName ~= "" and GameIds.resolve("NPC", npcName) or nil
 end
 
--- The animation chosen. empty string for default animation.
+-- The animation chosen: an empty string for the game's own animation, nothing saved yet for evil laugh.
 local function savedAnimation()
     local animationName = PersistentDB:GetString("animName")
-    if animationName ~= nil then return animationName ~= "" and Animations.idOf(animationName) or nil end
-    -- (saved by its id by an earlier build; -1 for the default animation)
-    local savedID = PersistentDB:GetInt("animOverride")
-    if savedID ~= nil then return Animations.isListed(savedID) and savedID or nil end
-    -- Nothing saved at all: evil laugh, the player's or the NPC's kind by the head in use.
-    return Settings.chosenNpcID and Animations.npcFallback or Animations.fallback
+    if animationName == nil then return Animations.fallback end
+    return animationName ~= "" and Animations.idOf(animationName) or nil
 end
 
 function Settings.load()
-    Settings.chosenNpcID = savedNpc()
+    Settings.chosenNpcID = savedNpc("npcName")
     Settings.lastSeenNpcAnimationID = savedInteger("animID")
     Settings.chosenAnimationID = savedAnimation()
     Settings.headViewDistance = savedInteger("headViewDistance") or Settings.DEFAULT_HEAD_VIEW_DISTANCE
@@ -62,18 +57,21 @@ function Settings.load()
     Settings.settingsX, Settings.settingsY = savedInteger("settingsX"), savedInteger("settingsY")
     Settings.settingsPoppedOut = savedInteger("settingsPoppedOut") == 1
     Settings.oneHeadPerGroup = savedInteger("oneHeadPerGroup") ~= 0
-    local variantsNpcName = PersistentDB:GetString("variantsNpcName")
-    Settings.variantsNpcID = variantsNpcName and variantsNpcName ~= "" and GameIds.resolve("NPC", variantsNpcName) or nil
+    Settings.variantsNpcID = savedNpc("variantsNpcName")
     Settings.variantsGroup = PersistentDB:GetString("variantsGroup")
     Settings.variantsPage = savedInteger("variantsPage")
 end
 
+local function npcNameOf(npcID)
+    return npcID and GameIds.nameOf("NPC", npcID) or ""
+end
+
 -- The settings are only kept in memory until the plugin shuts down.
 function Settings.save()
-    PersistentDB:SetString("npcName", Settings.chosenNpcID and GameIds.nameOf("NPC", Settings.chosenNpcID) or "")
-    PersistentDB:SetInt("npcID", Settings.chosenNpcID or -1)
+    PersistentDB:SetString("npcName", npcNameOf(Settings.chosenNpcID))
     PersistentDB:SetInt("animID", Settings.lastSeenNpcAnimationID or -1)
-    PersistentDB:SetString("animName", Settings.chosenAnimationID and Animations.nameOf(Settings.chosenAnimationID) or "")
+    local animationName = Settings.chosenAnimationID and Animations.nameOf(Settings.chosenAnimationID) or ""
+    PersistentDB:SetString("animName", animationName)
     PersistentDB:SetInt("headViewDistance", Settings.headViewDistance)
     PersistentDB:SetInt("variantsWidth", Settings.variantsWidth or -1)
     PersistentDB:SetInt("variantsHeight", Settings.variantsHeight or -1)
@@ -87,7 +85,7 @@ function Settings.save()
     PersistentDB:SetInt("settingsY", Settings.settingsY or -1)
     PersistentDB:SetInt("settingsPoppedOut", Settings.settingsPoppedOut and 1 or 0)
     PersistentDB:SetInt("oneHeadPerGroup", Settings.oneHeadPerGroup and 1 or 0)
-    PersistentDB:SetString("variantsNpcName", Settings.variantsNpcID and GameIds.nameOf("NPC", Settings.variantsNpcID) or "")
+    PersistentDB:SetString("variantsNpcName", npcNameOf(Settings.variantsNpcID))
     PersistentDB:SetString("variantsGroup", Settings.variantsGroup or "")
     PersistentDB:SetInt("variantsPage", Settings.variantsPage or -1)
 end

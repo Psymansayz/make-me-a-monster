@@ -11,6 +11,7 @@ VariantsWindow.animationForPlayerHead = nil -- function() -> the animation id th
 VariantsWindow.PLAYER_HEAD_ID = -1 -- the id standing for the player's own head (as the game's, for the local player)
 
 local grid = nil -- the HeadGrid while the window is open
+HeadGrid.addWindowFunctions(VariantsWindow, function() return grid end)
 local onButton = nil -- what the button under the heads does
 local groupJustSelected = false -- a head was selected under a group's name: the page last open no longer counts
 
@@ -57,24 +58,8 @@ local function isPlayerHead(npcID)
 end
 
 local function animationFor(npcID)
-    local animFor = isPlayerHead(npcID) and VariantsWindow.animationForPlayerHead or VariantsWindow.animationForNpcHeads
-    return animFor and animFor(npcID) or nil
-end
-
-function VariantsWindow.isOpen()
-    return grid ~= nil
-end
-
-function VariantsWindow.updateAnimations()
-    if grid then grid:updateAnimations() end
-end
-
-function VariantsWindow.refreshHeadSize()
-    if grid then grid:refreshHeadSize() end
-end
-
-function VariantsWindow.close()
-    if grid then grid:close() end
+    if isPlayerHead(npcID) then return VariantsWindow.animationForPlayerHead() end
+    return VariantsWindow.animationForNpcHeads(npcID)
 end
 
 function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPick, labelFor, view)
@@ -84,8 +69,7 @@ function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPic
     -- Already open: its cells are reused, as for a page change.
     if grid then
         grid.onPick, grid.nameOf = onPick, nameOf
-        grid.page = view.page or grid.page
-        grid:setHeads(variantIDs, current, title, view.page ~= nil)
+        grid:setHeads(variantIDs, current, title, view.page)
         grid:setExtraButton(view.buttonText)
         return true
     end

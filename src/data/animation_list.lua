@@ -82,8 +82,7 @@ return {
         { name = "HUMAN_ACTOR_CHATHEAD_SLEEP_STANDARD", label = "SLEEP" },
         { name = "HUMAN_ACTOR_CHATHEAD_SWOLLEN_JAW_STANDARD", label = "SWOLLEN JAW" },
     },
-    -- A listed animation -> its player twin (the same emotion and strength). One with no twin (a non-human
-    -- animation) is played as it is.
+    -- A listed animation -> its player twin (the same emotion and strength).
     twin = {
         HUMAN_UPDATE_CHATHEAD_SURPRISED_SUBTLE_LEN1 = "HUMAN_ACTOR_CHATHEAD_SHOCK_SUBTLE",
         HUMAN_UPDATE_CHATHEAD_SURPRISED_NORMAL_LEN1 = "HUMAN_ACTOR_CHATHEAD_SHOCK_STANDARD",
@@ -121,9 +120,10 @@ return {
         HUMAN_UPDATE_CHATHEAD_DISGUST_NORMAL_LEN1 = "HUMAN_ACTOR_CHATHEAD_DISGUSTED_STANDARD",
         HUMAN_UPDATE_CHATHEAD_DISGUST_EXTREME_LEN1 = "HUMAN_ACTOR_CHATHEAD_DISGUSTED_EXTREME",
     },
-    -- Player animations that also stand for a listed animation (switching back to an NPC's head), but aren't its twin.
+    -- The listed animation a player animation goes back to on an NPC's head, where no twin or several name it.
     alsoFor = {
         HUMAN_ACTOR_CHATHEAD_MIND_READ_STANDARD = "EYEGLO_MIND_MELD_CHAT",
+        HUMAN_ACTOR_CHATHEAD_NEUTRAL_STANDARD = "HUMAN_UPDATE_CHATHEAD_NEUTRAL_LEN1",
     },
     -- Played on the player's own head when none is chosen, where a head is shown outside dialogue (the variants
     -- window).

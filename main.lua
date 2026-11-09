@@ -44,10 +44,10 @@ local function updateOpenWindows()
     HeadFlaggingWindow.updateAnimations() -- (debug only)
 end
 
--- The saved data may not be readable yet when the plugin starts: so it is loaded again on entering the game.
+-- The settings are read once, here, and written at shutdown.
 Settings.load()
 HeadSwap.start()
-VariantsWindow.animationForNpcHeads = function(npcID) return HeadSwap.npcHeadAnimation(npcID) end
+VariantsWindow.animationForNpcHeads = HeadSwap.npcHeadAnimation
 -- The window shows NPC heads: they play the NPC version of the animation chosen, whichever head is in use.
 AllHeadsWindow.animationForNpcHeads = VariantsWindow.animationForNpcHeads
 VariantsWindow.animationForPlayerHead = function() return HeadSwap.playerHeadAnimation(true) end
@@ -81,10 +81,14 @@ local function coverDropdownText(dropdown, hideText, overlayText)
         end
         if hideText then
             if not coverState.covered then
-                coverState.colours = { dropdownRoot.entryText.rgba, dropdownRoot.selectedForegroundRGBA, dropdownRoot.mouseoverForegroundRGBA,
-                    alpha = dropdownRoot.entryText.alpha, isShadowed = dropdownRoot.entryText.isShadowed }
+                coverState.colours = {
+                    dropdownRoot.entryText.rgba, dropdownRoot.selectedForegroundRGBA,
+                    dropdownRoot.mouseoverForegroundRGBA,
+                    alpha = dropdownRoot.entryText.alpha, isShadowed = dropdownRoot.entryText.isShadowed,
+                }
                 coverState.covered = true
-                dropdownRoot.entryText.rgba, dropdownRoot.selectedForegroundRGBA, dropdownRoot.mouseoverForegroundRGBA = 0, 0, 0
+                dropdownRoot.entryText.rgba = 0
+                dropdownRoot.selectedForegroundRGBA, dropdownRoot.mouseoverForegroundRGBA = 0, 0
                 dropdownRoot.entryText.alpha, dropdownRoot.entryText.isShadowed = 0, false
             end
             if overlayText == nil then
@@ -113,18 +117,17 @@ local function coverDropdownText(dropdown, hideText, overlayText)
             local savedColours = coverState.colours
             coverState.covered = false
             if coverState.label ~= nil then coverState.label.hidden = true end
-            dropdownRoot.entryText.rgba, dropdownRoot.selectedForegroundRGBA, dropdownRoot.mouseoverForegroundRGBA = savedColours[1], savedColours[2], savedColours[3]
+            dropdownRoot.entryText.rgba = savedColours[1]
+            dropdownRoot.selectedForegroundRGBA, dropdownRoot.mouseoverForegroundRGBA = savedColours[2], savedColours[3]
             dropdownRoot.entryText.alpha, dropdownRoot.entryText.isShadowed = savedColours.alpha, savedColours.isShadowed
         end
     end)
 end
 
 local function showTextWhenClicked(dropdown)
-    pcall(function()
-        dropdown.root:Subscribe(ui.Hook.ONCLICK, function()
-            coverDropdownText(dropdown, false)
-            return false
-        end)
+    dropdown.root:Subscribe(ui.Hook.ONCLICK, function()
+        coverDropdownText(dropdown, false)
+        return false
     end)
 end
 
@@ -164,6 +167,11 @@ local function playerAnimationsInUse()
     return Settings.chosenNpcID == nil or Animations.isOnPlayerRig(Settings.chosenNpcID)
 end
 
+local function animationChanged()
+    updateOpenWindows()
+    refreshStatusTexts()
+end
+
 -- Keeps the chosen animation one that the head in use can play.
 local function fitAnimationToHead()
     if Settings.chosenAnimationID == nil then return end
@@ -172,7 +180,7 @@ local function fitAnimationToHead()
     local fittedAnimation = HeadSwap.animationForHead(Settings.chosenAnimationID, playerAnimationsInUse())
     if fittedAnimation ~= Settings.chosenAnimationID then
         Settings.chosenAnimationID = fittedAnimation
-        updateOpenWindows()
+        animationChanged()
     end
 end
 
@@ -183,8 +191,7 @@ local function refreshAnimationDropdown()
     fitAnimationToHead()
     if Settings.chosenAnimationID ~= nil and not Animations.isListed(Settings.chosenAnimationID) then
         Settings.chosenAnimationID = nil
-        updateOpenWindows()
-        refreshStatusTexts()
+        animationChanged()
     end
     if settingsControls == nil then return end
     -- The heads window shows NPC heads, whatever head is in use.
@@ -202,7 +209,8 @@ local function refreshAnimationDropdown()
     isRefreshingAnimationDropdown = true
     pcall(function() settingsControls.animationDropdown:SetEntries(entries, selected) end)
     isRefreshingAnimationDropdown = false
-    coverDropdownText(settingsControls.animationDropdown, true, selected ~= nil and listingsByEntryID[selected].label or nil)
+    coverDropdownText(settingsControls.animationDropdown, true,
+        selected ~= nil and listingsByEntryID[selected].label or nil)
 end
 
 -- A head can be in several groups: the one the head chosen was picked from, kept for this session.
@@ -211,8 +219,10 @@ local pickedGroup = nil
 local function groupOfChosenNpc()
     local npcID = Settings.chosenNpcID
     if npcID == nil then return nil end
-    for _, groupNpcID in ipairs(pickedGroup and pickedGroup.ids or {}) do
-        if groupNpcID == npcID then return pickedGroup end
+    if pickedGroup ~= nil then
+        for _, groupNpcID in ipairs(pickedGroup.ids) do
+            if groupNpcID == npcID then return pickedGroup end
+        end
     end
     return NpcDirectory.groupOfNpc(npcID)
 end
@@ -220,24 +230,26 @@ end
 -- A name equal to its group's stands for the whole group (Fairy holds Jukat too): so it counts the group's heads.
 local function labelOfEntry(npcGroup, member, memberNpcCount)
     if member == nil or NpcDirectory.lowerCaseAscii(member.name) == NpcDirectory.lowerCaseAscii(npcGroup.name) then
-        return NpcDirectory.labelOfGroup(npcGroup, #visibleIds(npcGroup))
+        return NpcDirectory.labelOf(npcGroup.name, #visibleIds(npcGroup))
     end
-    return NpcDirectory.labelOfMember(member, memberNpcCount)
+    return NpcDirectory.labelOf(member.name, memberNpcCount or #member.ids)
 end
 
 local function refreshNpcDropdown()
     if settingsControls == nil then return end
-    local query = ""
-    pcall(function() query = settingsControls.npcSearchBox:GetText() end)
+    local query = settingsControls.npcSearchBox:GetText()
     local matchingGroups = NpcDirectory.searchGroups(query, RESULTS_SHOWN, visibleIds)
     local matchCount = #matchingGroups
     local chosenGroup = groupOfChosenNpc()
-    local chosenMember = Settings.chosenNpcID and NpcDirectory.memberOfNpc(Settings.chosenNpcID, chosenGroup) or nil
+    local chosenMember = chosenGroup and NpcDirectory.memberOfNpc(Settings.chosenNpcID, chosenGroup)
     -- With nothing typed the NPC chosen stays listed, so the dropdown can show it after a restart.
     if chosenGroup ~= nil and query:find("^%s*$") then
         local alreadyListed = false
         for _, npcGroup in ipairs(matchingGroups) do
-            if npcGroup == chosenGroup then alreadyListed = true end
+            if npcGroup == chosenGroup then
+                alreadyListed = true
+                break
+            end
         end
         if not alreadyListed then table.insert(matchingGroups, 1, chosenGroup) end
     end
@@ -261,14 +273,12 @@ local function refreshNpcDropdown()
     else
         coverDropdownText(settingsControls.npcDropdown, selected == nil)
     end
-    pcall(function()
-        if NpcDirectory.done then
-            settingsControls.matchCountText.content = matchCount == RESULTS_SHOWN and ("Showing the first " .. RESULTS_SHOWN .. " matches.")
-                or (matchCount .. " matches.")
-        else
-            settingsControls.matchCountText.content = "Reading the game's NPCs: " .. #NpcDirectory.list .. " found so far..."
-        end
-    end)
+    if NpcDirectory.done then
+        settingsControls.matchCountText.content = matchCount == RESULTS_SHOWN
+            and ("Showing the first " .. RESULTS_SHOWN .. " matches.") or (matchCount .. " matches.")
+    else
+        settingsControls.matchCountText.content = "Reading the game's NPCs: " .. #NpcDirectory.list .. " found so far..."
+    end
 end
 
 -- Defined below.
@@ -307,8 +317,15 @@ local function chooseNpc(npcID, chosenFrom, selectedGroup)
 end
 
 local function isSelectionEvent(eventType)
-    local succeeded, selected = pcall(function() return eventType == ui.SelectionChangeEvent.SELECTED end)
-    return not succeeded or selected or eventType == nil
+    return eventType == nil or eventType == ui.SelectionChangeEvent.SELECTED
+end
+
+-- The layer plugin windows go on, or nil while the game screen isn't ready.
+local function pluginBuildLayer()
+    local succeeded, pluginLayer = pcall(function()
+        return ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
+    end)
+    return succeeded and pluginLayer or nil
 end
 
 -- The variants window's button text for the NPC chosen, or nil if it is in no other group.
@@ -325,10 +342,8 @@ local function showVariantsOf(npcGroup, page)
     if npcGroup == nil and not showPlayerHeadOnly then
         noticeText = "Choose an NPC first."
     else
-        local succeeded, pluginLayer = pcall(function()
-            return ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
-        end)
-        if succeeded and pluginLayer ~= nil then
+        local pluginLayer = pluginBuildLayer()
+        if pluginLayer ~= nil then
             local function chooseFromVariants(npcID)
                 chooseNpc(npcID ~= VariantsWindow.PLAYER_HEAD_ID and npcID or nil, "variants")
                 if Settings.chosenNpcID ~= nil then
@@ -337,7 +352,8 @@ local function showVariantsOf(npcGroup, page)
                 end
             end
             if showPlayerHeadOnly then
-                VariantsWindow.open(PrettyUI, pluginLayer, "My head", { VariantsWindow.PLAYER_HEAD_ID }, VariantsWindow.PLAYER_HEAD_ID, chooseFromVariants)
+                VariantsWindow.open(PrettyUI, pluginLayer, "My head", { VariantsWindow.PLAYER_HEAD_ID },
+                    VariantsWindow.PLAYER_HEAD_ID, chooseFromVariants)
             else
                 local variantIDs = visibleIds(npcGroup)
                 if #variantIDs == 0 then variantIDs = npcGroup.ids end
@@ -380,6 +396,8 @@ local function logTrollLooks()
         end
     end
 end
+
+local MIN_HEAD_PERCENT, MAX_HEAD_PERCENT, HEAD_PERCENT_STEP = 50, 300, 5
 
 -- The settings window's size, unless the screen is smaller.
 local SETTINGS_WIDTH, SETTINGS_HEIGHT = 420, 560
@@ -432,14 +450,15 @@ local function buildSettingsControls(view, window)
     controls.noticeText = view:AddText("")
     controls.headSizeText = view:AddText("Head size: " .. Settings.headSizePercent() .. "%")
     view:AddSlider({
-        min = 50,
-        max = 300,
-        step = 5,
+        min = MIN_HEAD_PERCENT,
+        max = MAX_HEAD_PERCENT,
+        step = HEAD_PERCENT_STEP,
         value = Settings.headSizePercent(),
         onChange = function(_, sliderValue)
-            local percent = math.max(50, math.min(300, math.floor(sliderValue / 5 + 0.5) * 5))
+            local percent = math.floor(sliderValue / HEAD_PERCENT_STEP + 0.5) * HEAD_PERCENT_STEP
+            percent = math.max(MIN_HEAD_PERCENT, math.min(MAX_HEAD_PERCENT, percent))
             Settings.setHeadSizePercent(percent)
-            HeadSwap.refreshHeadViewDistance()
+            HeadSwap.refreshOpenDialogues()
             AllHeadsWindow.refreshHeadSize()
             VariantsWindow.refreshHeadSize()
             controls.headSizeText.content = "Head size: " .. percent .. "%"
@@ -456,16 +475,14 @@ local function buildSettingsControls(view, window)
             end
             Settings.chosenAnimationID = selectedListing.id
             coverDropdownText(controls.animationDropdown, false)
-            updateOpenWindows()
-            refreshStatusTexts()
+            animationChanged()
         end,
     })
     showTextWhenClicked(controls.animationDropdown)
     view:AddSimpleButton("Use default animation", function()
         Settings.chosenAnimationID = nil
-        updateOpenWindows()
+        animationChanged()
         refreshAnimationDropdown()
-        refreshStatusTexts()
     end)
     settingsControls = controls
     refreshNpcDropdown()
@@ -482,6 +499,7 @@ local function releaseSettingsControls()
         if coverState.label ~= nil then pcall(function() coverState.label:Destroy() end) end
     end
     coverStates = {}
+    groupsByEntryID, matchedMembersByEntryID, listingsByEntryID = {}, {}, {}
     settingsControls = nil
 end
 
@@ -492,20 +510,31 @@ closeSettingsWindow = function()
     window:Destroy()
 end
 
+-- A saved NPC the list no longer has (taken out as a bad head) is forgotten.
+local function forgetUnlistedNpcs()
+    if Settings.chosenNpcID ~= nil and NpcDirectory.groupOfNpc(Settings.chosenNpcID) == nil then
+        Settings.chosenNpcID = nil
+    end
+    if Settings.variantsNpcID ~= nil and NpcDirectory.groupOfNpc(Settings.variantsNpcID) == nil then
+        Settings.variantsNpcID = nil
+    end
+end
+
 local function engage()
     engaged = true
     -- The saved list of heads, if there is one: no scan.
     local okList, savedHeads = pcall(require, "src/data/listed_heads")
-    if okList and type(savedHeads) == "table" and not NpcDirectory.baked then NpcDirectory.loadBaked(savedHeads) end
+    if okList and type(savedHeads) == "table" and not NpcDirectory.baked then
+        NpcDirectory.loadBaked(savedHeads)
+        forgetUnlistedNpcs()
+    end
 end
 
 -- Opening it again brings it to the front.
 local function openSettingsWindow()
     if settingsControls ~= nil then return settingsControls.window:Show() end
-    local succeeded, pluginLayer = pcall(function()
-        return ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
-    end)
-    if not succeeded or pluginLayer == nil then
+    local pluginLayer = pluginBuildLayer()
+    if pluginLayer == nil then
         pageNoticeText.content = "The game screen isn't ready."
         return
     end
@@ -533,7 +562,7 @@ local function openSettingsWindow()
     if not opened then
         print("[make_me_a_monster] could not build the settings window: " .. tostring(openError))
         pageNoticeText.content = "The settings window could not open."
-        settingsControls = nil
+        if settingsControls ~= nil then releaseSettingsControls() end
         if window ~= nil then pcall(function() window:Destroy() end) end
     end
 end
@@ -679,15 +708,12 @@ openAllHeadsWindow = function()
     if not NpcDirectory.regrouped then
         noticeText = "The NPCs are still being read."
     else
-        local succeeded, pluginLayer = pcall(function()
-            return ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
-        end)
-        if succeeded and pluginLayer ~= nil then
+        local pluginLayer = pluginBuildLayer()
+        if pluginLayer ~= nil then
             AllHeadsWindow.open(PrettyUI, pluginLayer, NpcDirectory.headsInNameOrder(visibleIds),
                 NpcDirectory.headsOfEachGroup(visibleIds), Settings.chosenNpcID, function(npcID, label)
                     chooseNpc(npcID, nil, NpcDirectory.groupLabelled(npcID, label))
-                end,
-                NpcDirectory.nameOfNpc, NpcDirectory.nameForGroupOfNpc, NpcDirectory.headsMatching)
+                end)
             refreshAnimationDropdown()
         else
             noticeText = "The game screen isn't ready."
@@ -1060,26 +1086,25 @@ Event.Draw.Subscribe("make_me_a_monster_draw", function()
     end
 end)
 
+-- Dialogue boxes are only watched in the game.
 Event.GameStateChanged.Subscribe("make_me_a_monster_state", function(event)
     if event.newState == GameState.GAME then
-        Settings.load()
         HeadSwap.start()
-        refreshAnimationDropdown()
-        refreshStatusTexts()
     elseif event.oldState == GameState.GAME then
         HeadSwap.reset()
     end
 end)
 
+-- The heads window's closing fits the animation to the head in use: so the dialogue boxes are put back after it.
 function PluginShutdown()
     Event.ContentLayerReady.Unsubscribe("make_me_a_monster_content")
-    closeSettingsWindow()
     Event.Draw.Unsubscribe("make_me_a_monster_draw")
     Event.GameStateChanged.Unsubscribe("make_me_a_monster_state")
-    HeadSwap.stop()
+    closeSettingsWindow()
+    closePage()
     VariantsWindow.close()
     AllHeadsWindow.close()
     HeadFlaggingWindow.close()
+    HeadSwap.stop()
     Settings.save()
-    closePage()
 end

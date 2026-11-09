@@ -1,5 +1,4 @@
--- Some heads need custom sizes. Currently only used to reduce the size of too-large heads, though
--- in the future it could be used to enlarge too-small heads too. The sizes are multipliers of the normal size.
+-- Heads drawn at a size of their own, as multipliers of the normal size.
 
 local GameIds = require("src/game/game_ids")
 

@@ -6,28 +6,12 @@ local GameIds = {}
 
 GameIds.unresolved = {} -- "<kind>.<name>" for every name the game did not know
 
-local idByName, nameByID = {}, {} -- kind -> name -> id, kind -> id -> name
-
-local function lookUp(kind, name)
-    return id[kind][name]
-end
-
+-- An unknown name reads as -1 in the game's table.
 function GameIds.resolve(kind, name)
-    local known = idByName[kind]
-    if known == nil then
-        known = {}
-        idByName[kind], nameByID[kind] = known, {}
-    end
-    local configID = known[name]
-    if configID ~= nil then return configID end
-    -- (the game's id table, outside the plugin: an unknown name reads as -1)
-    local found, value = pcall(lookUp, kind, name)
-    if not found or value == nil or value < 0 then
-        GameIds.unresolved[#GameIds.unresolved + 1] = kind .. "." .. name
-        return nil
-    end
-    known[name], nameByID[kind][value] = value, name
-    return value
+    local configID = id[kind][name]
+    if configID >= 0 then return configID end
+    GameIds.unresolved[#GameIds.unresolved + 1] = kind .. "." .. name
+    return nil
 end
 
 function GameIds.playerVariable(name)
@@ -39,9 +23,9 @@ function GameIds.playerVariable(name)
     return variable.id
 end
 
--- The name of a config previously resolved by GameIds.resolve
+-- The name in the game of a config resolved by GameIds.resolve.
 function GameIds.nameOf(kind, configID)
-    return nameByID[kind] and nameByID[kind][configID]
+    return id[kind].FromID(configID)
 end
 
 return GameIds

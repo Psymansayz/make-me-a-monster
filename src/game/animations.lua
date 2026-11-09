@@ -10,18 +10,17 @@ local function seqID(name)
     return GameIds.resolve("Seq", name)
 end
 
--- The listed animations as { id, label }: for NPC heads and for the player's own head.
+-- The listed animations as { id, label, isPlayerAnimation }: for NPC heads and for the player's own head.
 local optionsFor = { npc = {}, player = {} }
 
--- animation id -> { listing = the entry { id, label }, isPlayerAnimation = whether it is one for the player's own head }
-local listedAnimationByID = {}
+local listingByID = {} -- animation id -> its listing
 for _, listKind in ipairs({ "npc", "player" }) do
     for _, entry in ipairs(AnimationList[listKind]) do
         local animationID = seqID(entry.name)
         if animationID ~= nil then
-            local listing = { id = animationID, label = entry.label }
+            local listing = { id = animationID, label = entry.label, isPlayerAnimation = listKind == "player" }
             optionsFor[listKind][#optionsFor[listKind] + 1] = listing
-            listedAnimationByID[animationID] = { listing = listing, isPlayerAnimation = listKind == "player" }
+            listingByID[animationID] = listing
         end
     end
 end
@@ -48,22 +47,22 @@ for _, npcName in ipairs(AnimationList.headsOnPlayerRig) do
 end
 
 function Animations.isListed(animationID)
-    return listedAnimationByID[animationID] ~= nil
+    return listingByID[animationID] ~= nil
 end
 
 function Animations.labelOf(animationID)
-    local listed = listedAnimationByID[animationID]
-    return listed and listed.listing.label or nil
+    local listing = listingByID[animationID]
+    return listing and listing.label or nil
 end
 
 function Animations.isPlayerAnimation(animationID)
-    local listed = listedAnimationByID[animationID]
-    return listed ~= nil and listed.isPlayerAnimation
+    local listing = listingByID[animationID]
+    return listing ~= nil and listing.isPlayerAnimation
 end
 
 -- Whether the NPC head with this id plays the player's animations (it is built on the player's rig).
 function Animations.isOnPlayerRig(npcID)
-    return Animations.headsOnPlayerRig[npcID] == true
+    return Animations.headsOnPlayerRig[npcID] ~= nil
 end
 
 -- { id, label } in the dropdown's order, for the player's own head or for NPC heads.
