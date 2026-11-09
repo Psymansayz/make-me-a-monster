@@ -13,8 +13,9 @@
 --   extraButton = { text, onClick() } (a button after Next, without withSearch: no text, no button); nameOf(id);
 --   isPlayerHead(id); animationFor(id); pageLabel(page, pages, shown); onPick(id); onSearch(text);
 --   onPlacement(width, height, x, y); onClosed().
--- grid:setHeads(ids, current, title, keepPage); grid:setExtraButton(text); grid:updateAnimations();
--- grid:refreshHeadSize(); grid:close().
+-- grid:setHeads(ids, current, title, page); grid:setExtraButton(text); grid:updateAnimations();
+-- grid:refreshHeadSize(); grid:close(). HeadGrid.addWindowFunctions gives a window module its isOpen,
+-- updateAnimations, refreshHeadSize and close.
 
 local Settings = require("src/data/settings")
 local HeadSizes = require("src/game/head_sizes")
@@ -37,7 +38,7 @@ local BACKGROUND = Vector4.new(0.12, 0.09, 0.06, 1)
 local HOVER = Vector4.new(0.30, 0.24, 0.14, 1)
 local CURRENT = Vector4.new(0.55, 0.42, 0.14, 1)
 local TEXT_LIGHT = 0xE9E5DDFF
-local CELL_PARTS = { "background", "model", "name", "idLabel", "click" }
+local CELL_PARTS = { "model", "name", "idLabel", "background", "click" } -- (the order they are destroyed in)
 local raiseCount = 0 -- (for a Draw subscription id of each grid's own)
 
 local function frameSize(columns, rows, cellW, cellH)
@@ -154,7 +155,7 @@ end
 
 function HeadGrid:pick(npcID)
     self.current = npcID
-    pcall(self.onPick, npcID)
+    self.onPick(npcID)
     for _, cell in ipairs(self.cells) do self:paintCell(cell, cell.id == npcID) end
 end
 
@@ -191,12 +192,15 @@ local function modelTypeFor(self, npcID)
     return self.isPlayerHead(npcID) and ui.ModelType.PLAYER_HEAD or ui.ModelType.NPC_HEAD
 end
 
+-- A model set again is redrawn from nothing: so a cell keeping its head keeps its model.
 function HeadGrid:fillCell(cell, npcID)
-    cell.id = npcID
-    cell.model:SetModel(modelTypeFor(self, npcID), npcID)
-    cell.viewDistance = nil -- (SetModel puts the view distance back to its default: placeCell sets it again)
-    local animationID = self.animationFor(npcID)
-    if animationID ~= nil then cell.model.animID = animationID end
+    if cell.id ~= npcID then
+        cell.id = npcID
+        cell.model:SetModel(modelTypeFor(self, npcID), npcID)
+        cell.viewDistance = nil -- (SetModel puts the view distance back to its default: placeCell sets it again)
+        local animationID = self.animationFor(npcID)
+        if animationID ~= nil then cell.model.animID = animationID end
+    end
     local isPlayer = self.isPlayerHead(npcID)
     local name = not isPlayer and self.nameOf(npcID) or nil
     cell.name.content = isPlayer and "My head" or name or ("ID " .. npcID)
@@ -229,11 +233,11 @@ function HeadGrid:showPage()
     self.nav.after.root.hidden = self.page >= self.pages
 end
 
--- Shows other heads, on the page of the one in use, or with keepPage the page shown now.
-function HeadGrid:setHeads(ids, current, title, keepPage)
+-- Shows other heads, on this page, else on the page of the one in use.
+function HeadGrid:setHeads(ids, current, title, page)
     self.ids, self.current = ids, current
     self.pages = math.max(1, math.ceil(#ids / self.pageSize))
-    if not keepPage then self.page = pageOf(ids, current, self.pageSize) end
+    self.page = page or pageOf(ids, current, self.pageSize)
     if title ~= nil then self.window:SetTitle(title) end
     self:showPage()
 end
@@ -248,7 +252,7 @@ function HeadGrid:setExtraButton(text)
         self.extraWidth = self.simpleButton.getSize(text)
         button.root:SetSize(self.extraWidth, button.root.height)
     end
-    self:place()
+    if #self.cells > 0 then self:place() end -- (else the first page places it)
 end
 
 function HeadGrid:changePage(pageChange)
@@ -285,12 +289,14 @@ function HeadGrid:release()
     self.onPlacement(math.floor(root.width), math.floor(root.height),
         math.max(0, math.floor(root.x)), math.max(0, math.floor(root.y)))
     Event.Draw.Unsubscribe(self.raiseSubscription)
-    pcall(function() self.window:_UnregisterOverlay(self.labelsLayer) end) -- (the window may be going already)
+    self.window:_UnregisterOverlay(self.labelsLayer)
     -- Every part destroyed one by one: see the top of this file.
     for _, cell in ipairs(self.cells) do
         for _, part in ipairs(CELL_PARTS) do cell[part]:Destroy() end
     end
     self.cells = {}
+    for _, control in pairs(self.nav) do control:Destroy() end
+    self.nav = {}
     self.headsLayer:Destroy()
     self.labelsLayer:Destroy()
     self.onClosed()
@@ -387,10 +393,7 @@ function HeadGrid.open(PrettyUI, parent, options)
             width = 70, height = 30, placeholder = "Page", filterMode = ui.InputFieldFilterMode.NUMERIC,
             onSubmit = function(_, text)
                 local page = tonumber(text)
-                if page ~= nil and not self.closed then
-                    self.page = page
-                    self:showPage()
-                end
+                if page ~= nil and not self.closed then self:changePage(math.floor(page) - self.page) end
             end,
         })
     end
@@ -413,19 +416,28 @@ function HeadGrid.open(PrettyUI, parent, options)
     nav.label.maxLines = 1
     nav.label.font = id.Font.MUSEO_SANS_11PT_REGULAR
     nav.label.rgba = TEXT_LIGHT
-    self:setHeads(options.ids, options.current, nil, options.page ~= nil)
     if options.extraButton then self:setExtraButton(options.extraButton.text) end
-    -- Catches resizes: the cells are placed at once, at the size PrettyUI keeps within its limits.
+    self:setHeads(options.ids, options.current, nil, options.page)
+    -- Catches resizes. The content takes its new size only a moment later: so the size is worked out here, as PrettyUI
+    -- keeps it within its limits, before PrettyUI lays the overlay out again.
     local setWindowSize = self.window.SetSize
     self.window.SetSize = function(window, newWidth, newHeight)
+        if not self.closed then
+            newWidth = math.max(window.minWidth, math.min(window.maxWidth or newWidth, math.floor(newWidth)))
+            newHeight = math.max(window.minHeight, math.min(window.maxHeight or newHeight, math.floor(newHeight)))
+            self.contentWidth, self.contentHeight = contentSizeOf(newWidth, newHeight)
+        end
         setWindowSize(window, newWidth, newHeight)
-        if self.closed then return end
-        newWidth = math.max(window.minWidth, math.min(window.maxWidth or newWidth, math.floor(newWidth)))
-        newHeight = math.max(window.minHeight, math.min(window.maxHeight or newHeight, math.floor(newHeight)))
-        self.contentWidth, self.contentHeight = contentSizeOf(newWidth, newHeight)
-        self:layout()
     end
     return self
+end
+
+-- A window module's functions for its grid, while one is open: currentGrid() gives it, or nil.
+function HeadGrid.addWindowFunctions(windowModule, currentGrid)
+    function windowModule.isOpen() return currentGrid() ~= nil end
+    function windowModule.updateAnimations() if currentGrid() then currentGrid():updateAnimations() end end
+    function windowModule.refreshHeadSize() if currentGrid() then currentGrid():refreshHeadSize() end end
+    function windowModule.close() if currentGrid() then currentGrid():close() end end
 end
 
 return HeadGrid

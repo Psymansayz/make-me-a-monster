@@ -1,6 +1,6 @@
 -- Replaces the player's chat head in the game's dialogue boxes with an NPC's head.
 -- A box is handled once, when it opens, and again when the player changes the head,
--- the animation or the size
+-- the animation or the size.
 
 local Animations = require("src/game/animations")
 local Settings = require("src/data/settings")
@@ -37,9 +37,9 @@ local NPC_HEAD_MODEL_TYPE = ui.ModelType.NPC_HEAD
 
 local npcVersionOfPlayerAnimation = {}
 for npcAnimation, playerAnimation in pairs(Animations.twin) do
-    local lowestSoFar = npcVersionOfPlayerAnimation[playerAnimation]
-    if lowestSoFar == nil or npcAnimation < lowestSoFar then npcVersionOfPlayerAnimation[playerAnimation] = npcAnimation end
+    npcVersionOfPlayerAnimation[playerAnimation] = npcAnimation
 end
+-- A player animation several twins name is settled by alsoFor.
 for playerAnimation, npcAnimation in pairs(Animations.alsoFor) do
     npcVersionOfPlayerAnimation[playerAnimation] = npcAnimation
 end
@@ -87,13 +87,10 @@ local function applyNpcHeadAnimation(component, npcID, playerAnimationOfLine)
 end
 
 -- Notes the animation of the NPC speech box's head, for the swapped head to use.
-local function learnNpcSpeechAnimation()
-    local component = ui.Interfaces:GetComponent(NPC_SPEECH_HEADS[1])
+local function learnNpcSpeechAnimation(component)
     if component.visibleGlobal == true and tonumber(component.modelType) == NPC_HEAD_MODEL_TYPE then
         local animationID = tonumber(component.animID)
-        if animationID ~= nil and animationID >= 0 and animationID ~= Settings.lastSeenNpcAnimationID then
-            Settings.lastSeenNpcAnimationID = animationID
-        end
+        if animationID ~= nil and animationID >= 0 then Settings.lastSeenNpcAnimationID = animationID end
     end
 end
 
@@ -109,11 +106,7 @@ end
 
 -- Turns a shown player head into the NPC's head, or with no NPC chosen keeps it, playing the animation picked.
 local function swapComponentHead(component, npcID, componentKey)
-    if component.visibleGlobal ~= true then
-        writtenAnimation[componentKey] = nil
-        gameAnimation[componentKey], swappedHeads[componentKey] = nil, nil
-        return
-    end
+    if component.visibleGlobal ~= true then return end
     local modelType = tonumber(component.modelType)
     local swappedHead = swappedHeads[componentKey]
     if swappedHead ~= nil then
@@ -171,7 +164,9 @@ local function swapComponentHead(component, npcID, componentKey)
     if gameAnimationOfLine ~= nil and gameAnimationOfLine >= 0 then
         npcVersionOfGameAnimation = npcVersionOfPlayerAnimation[gameAnimationOfLine]
     end
-    swappedHeads[componentKey] = { npcID = npcID, gameAnimation = gameAnimationOfLine, orthographic = component.orthographic }
+    swappedHeads[componentKey] = {
+        npcID = npcID, gameAnimation = gameAnimationOfLine, orthographic = component.orthographic,
+    }
     component:SetModel(ui.ModelType.NPC_HEAD, npcID)
     -- The player's head is orthographic and NPC heads are not, but SetModel keeps the projection.
     component.orthographic = false
@@ -179,6 +174,28 @@ local function swapComponentHead(component, npcID, componentKey)
     writeHeadViewDistance(component, npcID)
 end
 
+-- Puts the player's head back as the game had set it, in place of the NPC's head or the animation chosen.
+local function restoreComponentHead(component, componentKey)
+    local modelType = tonumber(component.modelType)
+    local swappedHead = swappedHeads[componentKey]
+    if swappedHead ~= nil and modelType == NPC_HEAD_MODEL_TYPE and component.modelID1 == swappedHead.npcID then
+        component:SetModel(ui.ModelType.PLAYER_HEAD, -1)
+        component.orthographic = swappedHead.orthographic
+        if swappedHead.gameAnimation ~= nil then component.animID = swappedHead.gameAnimation end
+    elseif modelType ~= PLAYER_HEAD_MODEL_TYPE then
+        return -- an NPC's own head
+    elseif tonumber(component.animID) == writtenAnimation[componentKey] and gameAnimation[componentKey] ~= nil then
+        component.animID = gameAnimation[componentKey]
+    end
+    component.viewDistance = Settings.DEFAULT_HEAD_VIEW_DISTANCE
+end
+
+-- The head components of each box that can hold the player's head.
+local HEADS_OF_BOX = {}
+if PLAYER_LINE_INTERFACE ~= nil then HEADS_OF_BOX[PLAYER_LINE_INTERFACE] = PLAYER_LINE_HEADS end
+if PAIR_INTERFACE ~= nil then HEADS_OF_BOX[PAIR_INTERFACE] = PAIR_HEADS end
+
+-- The pcalls are for the game's own components, outside the plugin.
 local function visitHeads(visit, headComponentIDs)
     for _, componentKey in ipairs(headComponentIDs) do
         local fetched, component = pcall(ui.Interfaces.GetComponent, ui.Interfaces, componentKey)
@@ -186,27 +203,14 @@ local function visitHeads(visit, headComponentIDs)
     end
 end
 
--- visits the interfaces that could contain a player's head.
+-- Visits the interfaces that could contain a player's head.
 local function forEachOpenHeadComponent(visit)
     if isInterfaceOpen(PLAYER_LINE_INTERFACE) then visitHeads(visit, PLAYER_LINE_HEADS) end
     if isInterfaceOpen(PAIR_INTERFACE) then visitHeads(visit, PAIR_HEADS) end
 end
 
-local npcIDToShow = nil 
 local function swapHeadVisit(component, componentKey)
-    swapComponentHead(component, npcIDToShow, componentKey)
-end
-
-local function scaleHeadVisit(component, componentKey)
-    if component.visibleGlobal == true
-        and (swappedHeads[componentKey] ~= nil or tonumber(component.modelType) == PLAYER_HEAD_MODEL_TYPE) then
-        local swappedHead = swappedHeads[componentKey]
-        writeHeadViewDistance(component, swappedHead and swappedHead.npcID or nil)
-    end
-end
-
-function HeadSwap.refreshHeadViewDistance()
-    forEachOpenHeadComponent(scaleHeadVisit)
+    swapComponentHead(component, Settings.chosenNpcID, componentKey)
 end
 
 local handledBoxes = {} -- interface -> true while it is open and has been handled
@@ -259,15 +263,12 @@ end
 
 -- The game may fill a box's head only after the box is seen open: so the boxes are checked again for a few frames.
 local function handleBox(interface)
-    npcIDToShow = Settings.chosenNpcID
-    if interface == PLAYER_LINE_INTERFACE then
+    local heads = HEADS_OF_BOX[interface]
+    if heads ~= nil then
         startListeningForUpdates()
-        visitHeads(swapHeadVisit, PLAYER_LINE_HEADS)
-    elseif interface == PAIR_INTERFACE then
-        startListeningForUpdates()
-        visitHeads(swapHeadVisit, PAIR_HEADS)
-    elseif npcIDToShow ~= nil then
-        learnNpcSpeechAnimation()
+        visitHeads(swapHeadVisit, heads)
+    elseif Settings.chosenNpcID ~= nil then
+        visitHeads(learnNpcSpeechAnimation, NPC_SPEECH_HEADS)
     end
     recheckForAFewFrames()
 end
@@ -275,25 +276,24 @@ end
 local function forgetBox(interface)
     handledBoxes[interface] = nil
     stopListeningIfNoBoxHandled()
-    local closedHeads = interface == PLAYER_LINE_INTERFACE and PLAYER_LINE_HEADS
-        or interface == PAIR_INTERFACE and PAIR_HEADS or {}
-    for _, componentKey in ipairs(closedHeads) do
+    for _, componentKey in ipairs(HEADS_OF_BOX[interface] or {}) do
         writtenAnimation[componentKey], gameAnimation[componentKey], swappedHeads[componentKey] = nil, nil, nil
     end
 end
 
 -- The open boxes follow a new head, animation or size.
 function HeadSwap.refreshOpenDialogues()
-    npcIDToShow = Settings.chosenNpcID
     forEachOpenHeadComponent(swapHeadVisit)
-    if npcIDToShow ~= nil and isInterfaceOpen(NPC_SPEECH_INTERFACE) then pcall(learnNpcSpeechAnimation) end
+    if Settings.chosenNpcID ~= nil and isInterfaceOpen(NPC_SPEECH_INTERFACE) then
+        visitHeads(learnNpcSpeechAnimation, NPC_SPEECH_HEADS)
+    end
 end
 
 local function watchBox(interface)
     if isInterfaceOpen(interface) then
         if not handledBoxes[interface] then
             handledBoxes[interface] = true
-            pcall(handleBox, interface)
+            handleBox(interface)
         end
     elseif handledBoxes[interface] then
         forgetBox(interface)
@@ -305,7 +305,11 @@ end
 local function watchBoxes()
     watchBox(PLAYER_LINE_INTERFACE)
     watchBox(PAIR_INTERFACE)
-    if Settings.chosenNpcID ~= nil then watchBox(NPC_SPEECH_INTERFACE) end
+    if Settings.chosenNpcID ~= nil then
+        watchBox(NPC_SPEECH_INTERFACE)
+    elseif handledBoxes[NPC_SPEECH_INTERFACE] then
+        forgetBox(NPC_SPEECH_INTERFACE)
+    end
 end
 
 local WATCH_SUBSCRIPTION = "make_me_a_monster_dialogue_watch"
@@ -314,8 +318,10 @@ function HeadSwap.start()
     Event.ServerLogic.Subscribe(WATCH_SUBSCRIPTION, watchBoxes)
 end
 
+-- The open boxes get the player's head back: the game would only set it again for the next line.
 function HeadSwap.stop()
     Event.ServerLogic.Unsubscribe(WATCH_SUBSCRIPTION)
+    forEachOpenHeadComponent(restoreComponentHead)
     handledBoxes = {}
     stopListeningIfNoBoxHandled()
     stopRechecking()
@@ -325,6 +331,7 @@ end
 function HeadSwap.reset()
     HeadSwap.stop()
     writtenAnimation, gameAnimation, swappedHeads = {}, {}, {}
+    npcVersionOfGameAnimation = nil
 end
 
 return HeadSwap
