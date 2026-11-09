@@ -16,6 +16,7 @@ local PrettyUI = prettyui
 local DEBUG_HEAD_BROWSER = true
 local HeadFlaggingWindow = require("src/debug/head_flagging_window")
 local HeadGroupingWindow = require("src/debug/head_grouping_window")
+local DedicatedAnimationsWindow = require("src/debug/dedicated_animations_window")
 
 -- Development: names in the plugin's data that this game build does not know.
 if #GameIds.unresolved > 0 then
@@ -172,12 +173,19 @@ local function animationChanged()
     refreshStatusTexts()
 end
 
+-- The set of animations of its own the head in use plays, or nil.
+local function animationSetInUse()
+    return Animations.setOfHead(Settings.chosenNpcID)
+end
+
 -- Keeps the chosen animation one that the head in use can play.
 local function fitAnimationToHead()
     if Settings.chosenAnimationID == nil then return end
-    -- The heads window shows NPC heads: the animation stays as it is until it closes.
+    -- The heads window shows NPC heads: the player's animation stays as it is until it closes. (A set's animation is
+    -- fitted: each head in the window plays its own version of it.)
     if playerAnimationsInUse() and AllHeadsWindow.isOpen() then return end
-    local fittedAnimation = HeadSwap.animationForHead(Settings.chosenAnimationID, playerAnimationsInUse())
+    local fittedAnimation = HeadSwap.animationForHead(Settings.chosenAnimationID, playerAnimationsInUse(),
+        animationSetInUse())
     if fittedAnimation ~= Settings.chosenAnimationID then
         Settings.chosenAnimationID = fittedAnimation
         animationChanged()
@@ -194,9 +202,10 @@ local function refreshAnimationDropdown()
         animationChanged()
     end
     if settingsControls == nil then return end
-    -- The heads window shows NPC heads, whatever head is in use.
+    -- The heads window shows NPC heads, whatever head is in use; a head of a set lists the set's animations.
     local npcHeads = not playerAnimationsInUse() or AllHeadsWindow.isOpen()
-    local listedAnimations = Animations.options(not npcHeads)
+    local headSet = animationSetInUse()
+    local listedAnimations = Animations.options(not npcHeads, headSet)
     local entries = {}
     listingsByEntryID = {}
     for entryID, listing in ipairs(listedAnimations) do
@@ -204,7 +213,7 @@ local function refreshAnimationDropdown()
         listingsByEntryID[entryID] = listing
     end
     local shownChoiceID = Settings.chosenAnimationID
-    if npcHeads then shownChoiceID = HeadSwap.animationForHead(shownChoiceID, false) end
+    if npcHeads then shownChoiceID = HeadSwap.animationForHead(shownChoiceID, false, headSet) end
     local selected = findSelectedEntryID(listingsByEntryID, function(listing) return listing.id == shownChoiceID end)
     isRefreshingAnimationDropdown = true
     pcall(function() settingsControls.animationDropdown:SetEntries(entries, selected) end)
@@ -292,6 +301,7 @@ local openHeadFlaggingWindow
 local openBlacklistedHeadsWindow
 local openNewestHeadsWindow
 local openHeadGroupingWindow
+local openDedicatedAnimationsWindow
 local logExactDuplicates
 local logListedHeadModels
 local logListedHeadNames
@@ -434,6 +444,7 @@ local function buildSettingsControls(view, window)
     if DEBUG_HEAD_BROWSER then
         view:AddSimpleButton("Debug: flag heads for the blacklist", function() openHeadFlaggingWindow() end)
         view:AddSimpleButton("Debug: all animations on Hans", function() openAnimationFlaggingWindow() end)
+        view:AddSimpleButton("Debug: human vs dedicated animations", function() openDedicatedAnimationsWindow() end)
         view:AddSimpleButton("Debug: blacklisted heads with the player's animations", function()
             openBlacklistedHeadsWindow()
         end)
@@ -792,6 +803,29 @@ local function showAnimationBrowser()
     return true
 end
 
+-- TEMPORARY probe: do races (Goebies...) have chat animations of their own? Logs, once, every animation named for
+-- chat or heads beyond the human sets, and every Goebie one. Remove once answered.
+local CHAT_PROBE_PER_LINE = 8
+local chatAnimationsLogged = false
+local function logChatAnimations()
+    if chatAnimationsLogged then return end
+    chatAnimationsLogged = true
+    local found = {}
+    for _, anim in ipairs(AnimationScan.list) do
+        local name = anim.name:upper()
+        local isHumanSet = name:find("^HUMAN_UPDATE_CHATHEAD") or name:find("^HUMAN_ACTOR_CHATHEAD")
+        if name:find("GOEBIE") or (not isHumanSet and (name:find("CHAT") or name:find("HEAD"))) then
+            found[#found + 1] = anim.id .. "=" .. anim.name
+        end
+    end
+    print(("[make_me_a_monster] CHATPROBE|begin|%d of %d animations"):format(#found, #AnimationScan.list))
+    for first = 1, #found, CHAT_PROBE_PER_LINE do
+        print("[make_me_a_monster] CHATPROBE|" .. table.concat(found, " ", first,
+            math.min(#found, first + CHAT_PROBE_PER_LINE - 1)))
+    end
+    print("[make_me_a_monster] CHATPROBE|end")
+end
+
 -- Reads every animation a few at a time (continueAnimationBrowser), then opens the window.
 openAnimationFlaggingWindow = function()
     animationBrowserWanted = true
@@ -808,6 +842,7 @@ local function continueAnimationBrowser()
         return
     end
     animationBrowserWanted = false
+    logChatAnimations()
     local opened = showAnimationBrowser()
     if settingsControls then settingsControls.noticeText.content = opened and "" or "The game screen isn't ready." end
 end
@@ -935,6 +970,14 @@ openNewestHeadsWindow = function()
 end
 
 -- Debug: every listed head sorted by its models, for grouping them by hand (src/debug/head_grouping_window.lua).
+openDedicatedAnimationsWindow = function()
+    local pluginLayer = pluginBuildLayer()
+    local opened = pluginLayer ~= nil and DedicatedAnimationsWindow.open(PrettyUI, pluginLayer)
+    if settingsControls then
+        settingsControls.noticeText.content = opened and "" or "The dedicated animations window could not open."
+    end
+end
+
 openHeadGroupingWindow = function()
     local pluginLayer = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
     if pluginLayer == nil or not NpcDirectory.regrouped then
@@ -1105,6 +1148,7 @@ function PluginShutdown()
     VariantsWindow.close()
     AllHeadsWindow.close()
     HeadFlaggingWindow.close()
+    DedicatedAnimationsWindow.close()
     HeadSwap.stop()
     Settings.save()
 end

@@ -10,8 +10,10 @@
 -- HeadGrid.open(PrettyUI, parent, options) -> the grid, or nil. options: title; columns, rows; ids; current;
 --   minWidth; savedWidth/Height/X/Y; page (else the page of the head in use); withSearch;
 --   toggle = { text, selected, onChange(selected) } (a check box, with withSearch);
---   extraButton = { text, onClick() } (a button after Next, without withSearch: no text, no button); nameOf(id);
---   isPlayerHead(id); animationFor(id); pageLabel(page, pages, shown); onPick(id); onSearch(text);
+--   extraButton = { text, onClick() } (a button at the row's end, without withSearch: no text, no button);
+--   numberBox = { placeholder, onSubmit(number) } (a number field after Next, without withSearch);
+--   nameOf(id, position); isPlayerHead(id); animationFor(id, position) (position: the head's place in ids, for a head
+--   listed more than once); pageLabel(page, pages, shown); onPick(id); onSearch(text);
 --   onPlacement(width, height, x, y); onClosed().
 -- grid:setHeads(ids, current, title, page); grid:setExtraButton(text); grid:updateAnimations();
 -- grid:refreshHeadSize(); grid:close(). HeadGrid.addWindowFunctions gives a window module its isOpen,
@@ -27,6 +29,7 @@ local PAD, GAP = 8, 6
 local NAV_HEIGHT = 36
 local NAV_BUTTON = 80
 local NAV_TOGGLE = 130 -- (a check box and its label)
+local NAV_NUMBER = 70
 local LABELS_HEIGHT = 40 -- the name and the id under a head: two 16-high lines, 38 and 20 up from the cell's bottom
 local START_CELL_W, START_CELL_H = 150, 170 -- a cell when a window opens without a saved size
 local MIN_CELL_W, MIN_CELL_H = 90, 110      -- and the least a window can be resized to
@@ -118,6 +121,10 @@ function HeadGrid:placeNavigation(g)
         nav.label:SetSize(math.max(1, g.width - PAD * 2 - labelX), 20)
     else
         local labelX, labelEnd = PAD + (NAV_BUTTON + 6) * 2, g.width - PAD
+        if nav.number then
+            nav.number.root:SetPos(labelX, y + 2)
+            labelX = labelX + NAV_NUMBER + 6
+        end
         if nav.extra and not nav.extra.root.hidden then
             labelEnd = labelEnd - self.extraWidth
             nav.extra.root:SetPos(labelEnd, y + 2)
@@ -193,16 +200,17 @@ local function modelTypeFor(self, npcID)
 end
 
 -- A model set again is redrawn from nothing: so a cell keeping its head keeps its model.
-function HeadGrid:fillCell(cell, npcID)
+function HeadGrid:fillCell(cell, npcID, position)
+    cell.position = position
     if cell.id ~= npcID then
         cell.id = npcID
         cell.model:SetModel(modelTypeFor(self, npcID), npcID)
         cell.viewDistance = nil -- (SetModel puts the view distance back to its default: placeCell sets it again)
-        local animationID = self.animationFor(npcID)
+        local animationID = self.animationFor(npcID, position)
         if animationID ~= nil then cell.model.animID = animationID end
     end
     local isPlayer = self.isPlayerHead(npcID)
-    local name = not isPlayer and self.nameOf(npcID) or nil
+    local name = not isPlayer and self.nameOf(npcID, position) or nil
     cell.name.content = isPlayer and "My head" or name or ("ID " .. npcID)
     cell.idLabel.content = name and ("ID " .. npcID) or ""
     setCellHidden(cell, false)
@@ -225,7 +233,7 @@ function HeadGrid:showPage()
     local first = (self.page - 1) * self.pageSize
     for _, cell in ipairs(self.cells) do
         local npcID = self.ids[first + cell.index]
-        if npcID == nil then emptyCell(cell) else self:fillCell(cell, npcID) end
+        if npcID == nil then emptyCell(cell) else self:fillCell(cell, npcID, first + cell.index) end
     end
     self.nav.label.content = self.pageLabel(self.page, self.pages, #self.ids)
     self:place()
@@ -266,7 +274,7 @@ end
 function HeadGrid:updateAnimations()
     for _, cell in ipairs(self.cells) do
         if cell.id ~= nil then
-            local animationID = self.animationFor(cell.id)
+            local animationID = self.animationFor(cell.id, cell.position)
             if animationID ~= nil then
                 cell.model.animID = animationID
             else
@@ -394,6 +402,16 @@ function HeadGrid.open(PrettyUI, parent, options)
             onSubmit = function(_, text)
                 local page = tonumber(text)
                 if page ~= nil and not self.closed then self:changePage(math.floor(page) - self.page) end
+            end,
+        })
+    end
+    if options.numberBox then
+        nav.number = PrettyUI.TextField.new(content, {
+            width = NAV_NUMBER, height = 30, placeholder = options.numberBox.placeholder,
+            filterMode = ui.InputFieldFilterMode.NUMERIC,
+            onSubmit = function(_, text)
+                local number = tonumber(text)
+                if number ~= nil and not self.closed then options.numberBox.onSubmit(math.floor(number)) end
             end,
         })
     end

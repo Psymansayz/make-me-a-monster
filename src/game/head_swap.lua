@@ -52,6 +52,11 @@ end
 -- The animation the NPC head with this id should play (in a dialogue box or a window).
 function HeadSwap.npcHeadAnimation(npcID, playerAnimationOfLine)
     local chosenAnimation = Settings.chosenAnimationID
+    local headSet = Animations.setOfHead(npcID)
+    if headSet ~= nil then
+        local wanted = chosenAnimation or npcVersionOfGameAnimation or Settings.lastSeenNpcAnimationID
+        return HeadSwap.animationForHead(wanted or Animations.npcFallback, false, headSet)
+    end
     if Animations.isOnPlayerRig(npcID) then
         if chosenAnimation ~= nil then return HeadSwap.animationForHead(chosenAnimation, true) end
         if playerAnimationOfLine ~= nil and playerAnimationOfLine >= 0 then return playerAnimationOfLine end
@@ -69,9 +74,19 @@ function HeadSwap.playerHeadAnimation(withNeutral)
     return HeadSwap.animationForHead(chosenAnimation, true)
 end
 
--- The animation to keep when the head changes between the new player model heads and old NPC heads.
-function HeadSwap.animationForHead(animationID, forPlayerHead)
+-- The animation to keep when the head changes between the new player model heads, old NPC heads and the heads of a
+-- set with animations of its own (headSet): the same emotion where the other kind has it, else a default.
+function HeadSwap.animationForHead(animationID, forPlayerHead, headSet)
     if animationID == nil then return nil end
+    local ownSet = Animations.setOf(animationID)
+    if headSet ~= nil then
+        if ownSet == headSet then return animationID end
+        local humanVersion = ownSet and ownSet.toHuman[animationID] or nil
+        if ownSet == nil then humanVersion = HeadSwap.animationForHead(animationID, false) end
+        if headSet.alsoHuman and humanVersion ~= nil then return humanVersion end
+        return humanVersion and headSet.fromHuman[humanVersion] or headSet.default
+    end
+    if ownSet ~= nil then animationID = ownSet.toHuman[animationID] or Animations.npcFallback end
     local isPlayerAnimation = Animations.isPlayerAnimation(animationID)
     if forPlayerHead then
         if isPlayerAnimation then return animationID end

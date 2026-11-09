@@ -20,7 +20,9 @@ Settings.galleryX = nil       -- where the all-heads window was left
 Settings.galleryY = nil
 Settings.settingsX = nil      -- where the settings window was left
 Settings.settingsY = nil
-Settings.settingsPoppedOut = false -- the settings are in their own window, else on the plugin's page
+-- The settings are in their own window, else on the plugin's page. Not saved: the window closes when the plugin
+-- unloads, so the settings start on the page.
+Settings.settingsPoppedOut = false
 Settings.oneHeadPerGroup = true -- the all-heads window shows one head of each group, else every head
 Settings.variantsNpcID = nil -- the NPC chosen when the variants window was last open
 Settings.variantsGroup = nil -- which group of it the window showed (VariantsWindow's text for it)
@@ -55,7 +57,6 @@ function Settings.load()
     Settings.variantsX, Settings.variantsY = savedInteger("variantsX"), savedInteger("variantsY")
     Settings.galleryX, Settings.galleryY = savedInteger("galleryX"), savedInteger("galleryY")
     Settings.settingsX, Settings.settingsY = savedInteger("settingsX"), savedInteger("settingsY")
-    Settings.settingsPoppedOut = savedInteger("settingsPoppedOut") == 1
     Settings.oneHeadPerGroup = savedInteger("oneHeadPerGroup") ~= 0
     Settings.variantsNpcID = savedNpc("variantsNpcName")
     Settings.variantsGroup = PersistentDB:GetString("variantsGroup")
@@ -83,7 +84,6 @@ function Settings.save()
     PersistentDB:SetInt("galleryY", Settings.galleryY or -1)
     PersistentDB:SetInt("settingsX", Settings.settingsX or -1)
     PersistentDB:SetInt("settingsY", Settings.settingsY or -1)
-    PersistentDB:SetInt("settingsPoppedOut", Settings.settingsPoppedOut and 1 or 0)
     PersistentDB:SetInt("oneHeadPerGroup", Settings.oneHeadPerGroup and 1 or 0)
     PersistentDB:SetString("variantsNpcName", npcNameOf(Settings.variantsNpcID))
     PersistentDB:SetString("variantsGroup", Settings.variantsGroup or "")

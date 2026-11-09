@@ -2,6 +2,7 @@
 -- at load.
 
 local AnimationList = require("src/data/animation_list")
+local DedicatedAnimations = require("src/data/dedicated_animations")
 local GameIds = require("src/game/game_ids")
 
 local Animations = {}
@@ -46,6 +47,55 @@ for _, npcName in ipairs(AnimationList.headsOnPlayerRig) do
     if npcID ~= nil then Animations.headsOnPlayerRig[npcID] = true end
 end
 
+-- The races and characters with animations of their own (src/data/dedicated_animations.lua), which their heads play
+-- in place of the human ones: { name, options, default, fromHuman = { human id -> own id }, toHuman = { own id ->
+-- human id }, alsoHuman }. options are listings, as for the human animations.
+local setOfHead, setOfAnimation = {}, {}
+for _, savedSet in ipairs(DedicatedAnimations) do
+    local animationSet = { name = savedSet.name, options = {}, fromHuman = {}, toHuman = {},
+        default = seqID(savedSet.default), alsoHuman = savedSet.alsoHuman == true }
+    for _, entry in ipairs(savedSet.animations) do
+        local animationID = seqID(entry[1])
+        if animationID ~= nil then
+            local listing = { id = animationID, label = entry[2], isPlayerAnimation = false }
+            animationSet.options[#animationSet.options + 1] = listing
+            listingByID[animationID], setOfAnimation[animationID] = listing, animationSet
+            animationSet.toHuman[animationID] = entry[3] and seqID(entry[3])
+        end
+    end
+    for _, pair in ipairs(savedSet.fromHuman) do
+        local humanID, ownID = seqID(pair[1]), seqID(pair[2])
+        if humanID ~= nil and ownID ~= nil then animationSet.fromHuman[humanID] = ownID end
+    end
+    -- The other lengths of a listed animation: not listed, but the set's own (as the game may play them).
+    for _, pair in ipairs(savedSet.sameAs or {}) do
+        local variantID, listedID = seqID(pair[1]), seqID(pair[2])
+        if variantID ~= nil and setOfAnimation[listedID] == animationSet then
+            setOfAnimation[variantID], animationSet.toHuman[variantID] = animationSet, animationSet.toHuman[listedID]
+        end
+    end
+    -- With the human animations too, they follow its own in the dropdown.
+    if animationSet.alsoHuman then
+        for _, listing in ipairs(optionsFor.npc) do animationSet.options[#animationSet.options + 1] = listing end
+    end
+    if animationSet.default ~= nil then
+        for _, npcName in ipairs(savedSet.heads) do
+            local npcID = GameIds.resolve("NPC", npcName)
+            if npcID ~= nil and setOfHead[npcID] == nil then setOfHead[npcID] = animationSet end
+        end
+    end
+end
+
+-- The set of animations of its own the NPC head with this id plays, or nil (it plays the human ones).
+function Animations.setOfHead(npcID)
+    return npcID and setOfHead[npcID]
+end
+
+-- The set an animation of its own belongs to, or nil (a human animation).
+function Animations.setOf(animationID)
+    return animationID and setOfAnimation[animationID]
+end
+
 function Animations.isListed(animationID)
     return listingByID[animationID] ~= nil
 end
@@ -65,8 +115,9 @@ function Animations.isOnPlayerRig(npcID)
     return Animations.headsOnPlayerRig[npcID] ~= nil
 end
 
--- { id, label } in the dropdown's order, for the player's own head or for NPC heads.
-function Animations.options(forPlayerHead)
+-- { id, label } in the dropdown's order: for the player's own head, for NPC heads, or for the heads of a set.
+function Animations.options(forPlayerHead, headSet)
+    if headSet ~= nil then return headSet.options end
     return forPlayerHead and optionsFor.player or optionsFor.npc
 end
 
