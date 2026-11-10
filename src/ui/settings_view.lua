@@ -16,7 +16,8 @@ local OWN_HEAD_TEXT = "My own head" -- (the closed box with no NPC chosen)
 
 local controls = nil -- the controls while they are built; .window is the window holding them, if one is
 -- What the controls ask of the rest of the plugin (given to build): useOwnHead(), npcPicked(npcID, npcGroup,
--- selectedGroup), groupOfChosenNpc(), openVariants(), openAllHeads(), headSizeChanged(), animationChanged().
+-- selectedGroup), groupOfChosenNpc(), openVariants(), openAllHeads(), headSizeChanged(), animationChanged(); and
+-- optionally extraControls(view), adding controls under the buttons (dev's debug ones).
 local actions = nil
 local npcEntries = nil -- the NPC dropdown's: { query, groups, members (the one that matched), labels, selected }
 local animationEntries = nil -- the animation dropdown's: { options (the listings), selected }
@@ -256,6 +257,7 @@ function SettingsView.build(view, window, givenActions)
     view:AddSimpleButton("View variants", function() actions.openVariants() end)
     view:AddSimpleButton("Browse all heads", function() actions.openAllHeads() end)
     view:AddSimpleButton("Use my own head", function() actions.useOwnHead() end)
+    if actions.extraControls ~= nil then actions.extraControls(view) end
     built.noticeText = view:AddText("")
     built.headSizeText = view:AddText("Head size: " .. Settings.headSizePercent() .. "%")
     local limits = Settings.HEAD_SIZE_PERCENT
