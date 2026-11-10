@@ -6,6 +6,7 @@ local NpcDirectory = require("src/game/npc_directory")
 local HeadSwap = require("src/game/head_swap")
 local VariantsWindow = require("src/ui/variants_window")
 local AllHeadsWindow = require("src/ui/all_heads_window")
+local DropdownList = require("src/ui/dropdown_list")
 local Animations = require("src/game/animations")
 local GameIds = require("src/game/game_ids")
 
@@ -83,13 +84,16 @@ local function coverDropdownText(dropdown, hideText, overlayText)
         if hideText then
             if not coverState.covered then
                 coverState.colours = {
-                    dropdownRoot.entryText.rgba, dropdownRoot.selectedForegroundRGBA,
-                    dropdownRoot.mouseoverForegroundRGBA,
-                    alpha = dropdownRoot.entryText.alpha, isShadowed = dropdownRoot.entryText.isShadowed,
+                    dropdownRoot.entryText.rgba, alpha = dropdownRoot.entryText.alpha,
+                    isShadowed = dropdownRoot.entryText.isShadowed,
                 }
+                if not dropdown.isList then -- (a dropdown list has no colours of its own for these)
+                    coverState.colours[2] = dropdownRoot.selectedForegroundRGBA
+                    coverState.colours[3] = dropdownRoot.mouseoverForegroundRGBA
+                    dropdownRoot.selectedForegroundRGBA, dropdownRoot.mouseoverForegroundRGBA = 0, 0
+                end
                 coverState.covered = true
                 dropdownRoot.entryText.rgba = 0
-                dropdownRoot.selectedForegroundRGBA, dropdownRoot.mouseoverForegroundRGBA = 0, 0
                 dropdownRoot.entryText.alpha, dropdownRoot.entryText.isShadowed = 0, false
             end
             if overlayText == nil then
@@ -119,7 +123,10 @@ local function coverDropdownText(dropdown, hideText, overlayText)
             coverState.covered = false
             if coverState.label ~= nil then coverState.label.hidden = true end
             dropdownRoot.entryText.rgba = savedColours[1]
-            dropdownRoot.selectedForegroundRGBA, dropdownRoot.mouseoverForegroundRGBA = savedColours[2], savedColours[3]
+            if not dropdown.isList then
+                dropdownRoot.selectedForegroundRGBA = savedColours[2]
+                dropdownRoot.mouseoverForegroundRGBA = savedColours[3]
+            end
             dropdownRoot.entryText.alpha, dropdownRoot.entryText.isShadowed = savedColours.alpha, savedColours.isShadowed
         end
     end)
@@ -148,10 +155,33 @@ local function chatheadStatusMessage()
     return "Current chathead: " .. (npcName or ("NPC " .. npcID)) .. variantSuffix
 end
 
+-- Whether the head in use plays the player's animations: the player's own head, or an NPC head on the player's rig.
+local function playerAnimationsInUse()
+    return Settings.chosenNpcID == nil or Animations.isOnPlayerRig(Settings.chosenNpcID)
+end
+
+-- The set of animations of its own the head in use plays, or nil.
+local function animationSetInUse()
+    return Animations.setOfHead(Settings.chosenNpcID)
+end
+
+-- The heads window shows NPC heads, whatever head is in use.
+local function npcAnimationsShown()
+    return not playerAnimationsInUse() or AllHeadsWindow.isOpen()
+end
+
+-- The chosen animation as the head in use plays it (a head of a set: the set's version of it).
+local function animationShown()
+    local headSet = animationSetInUse()
+    local shownAnimation = headSet and Settings.chosenAnimationID or HeadSwap.humanChoice()
+    if not npcAnimationsShown() then return shownAnimation end
+    return HeadSwap.animationForHead(shownAnimation, false, headSet)
+end
+
 local function animationStatusText()
-    local chosenAnimation = Settings.chosenAnimationID
-    if chosenAnimation ~= nil then
-        return "Animation: " .. (Animations.labelOf(chosenAnimation) or ("ID " .. chosenAnimation))
+    local shownAnimation = animationShown()
+    if shownAnimation ~= nil then
+        return "Animation: " .. (Animations.labelOf(shownAnimation) or ("ID " .. shownAnimation))
     end
     return ""
 end
@@ -163,31 +193,20 @@ local function refreshStatusTexts()
     end
 end
 
--- Whether the head in use plays the player's animations: the player's own head, or an NPC head on the player's rig.
-local function playerAnimationsInUse()
-    return Settings.chosenNpcID == nil or Animations.isOnPlayerRig(Settings.chosenNpcID)
-end
-
 local function animationChanged()
     updateOpenWindows()
     refreshStatusTexts()
 end
 
--- The set of animations of its own the head in use plays, or nil.
-local function animationSetInUse()
-    return Animations.setOfHead(Settings.chosenNpcID)
-end
-
--- Keeps the chosen animation one that the head in use can play.
+-- Keeps the chosen animation one that the head in use can play. A head of a set plays its version of the choice, which
+-- is kept as it is for the other heads; a set's animation becomes a human one back on a head outside the sets.
 local function fitAnimationToHead()
-    if Settings.chosenAnimationID == nil then return end
-    -- The heads window shows NPC heads: the player's animation stays as it is until it closes. (A set's animation is
-    -- fitted: each head in the window plays its own version of it.)
+    if Settings.chosenAnimationID == nil or animationSetInUse() ~= nil then return end
+    -- The heads window shows NPC heads: the player's animation stays as it is until it closes.
     if playerAnimationsInUse() and AllHeadsWindow.isOpen() then return end
-    local fittedAnimation = HeadSwap.animationForHead(Settings.chosenAnimationID, playerAnimationsInUse(),
-        animationSetInUse())
+    local fittedAnimation = HeadSwap.animationForHead(HeadSwap.humanChoice(), playerAnimationsInUse())
     if fittedAnimation ~= Settings.chosenAnimationID then
-        Settings.chosenAnimationID = fittedAnimation
+        Settings.chooseAnimation(fittedAnimation)
         animationChanged()
     end
 end
@@ -198,22 +217,19 @@ local function refreshAnimationDropdown()
     -- (also with the settings closed: a heads window can stay open and change the head in use)
     fitAnimationToHead()
     if Settings.chosenAnimationID ~= nil and not Animations.isListed(Settings.chosenAnimationID) then
-        Settings.chosenAnimationID = nil
+        Settings.chooseAnimation(nil)
         animationChanged()
     end
     if settingsControls == nil then return end
-    -- The heads window shows NPC heads, whatever head is in use; a head of a set lists the set's animations.
-    local npcHeads = not playerAnimationsInUse() or AllHeadsWindow.isOpen()
-    local headSet = animationSetInUse()
-    local listedAnimations = Animations.options(not npcHeads, headSet)
+    -- A head of a set lists the set's animations.
+    local listedAnimations = Animations.options(not npcAnimationsShown(), animationSetInUse())
     local entries = {}
     listingsByEntryID = {}
     for entryID, listing in ipairs(listedAnimations) do
         entries[#entries + 1] = { label = listing.label, id = entryID }
         listingsByEntryID[entryID] = listing
     end
-    local shownChoiceID = Settings.chosenAnimationID
-    if npcHeads then shownChoiceID = HeadSwap.animationForHead(shownChoiceID, false, headSet) end
+    local shownChoiceID = animationShown()
     local selected = findSelectedEntryID(listingsByEntryID, function(listing) return listing.id == shownChoiceID end)
     isRefreshingAnimationDropdown = true
     pcall(function() settingsControls.animationDropdown:SetEntries(entries, selected) end)
@@ -244,9 +260,9 @@ local function labelOfEntry(npcGroup, member, memberNpcCount)
     return NpcDirectory.labelOf(member.name, memberNpcCount or #member.ids)
 end
 
-local function refreshNpcDropdown()
-    if settingsControls == nil then return end
-    local query = settingsControls.npcSearchBox:GetText()
+-- The NPC dropdown's entries for a search ({ label, id }), the entry of the NPC chosen or nil, and how many groups
+-- matched.
+local function npcEntriesFor(query)
     local matchingGroups = NpcDirectory.searchGroups(query, RESULTS_SHOWN, visibleIds)
     local matchCount = #matchingGroups
     local chosenGroup = groupOfChosenNpc()
@@ -273,21 +289,29 @@ local function refreshNpcDropdown()
         matchedMembersByEntryID[entryID] = matchedMember
     end
     local selected = findSelectedEntryID(groupsByEntryID, function(npcGroup) return npcGroup == chosenGroup end)
-    isRefreshingNpcDropdown = true
-    pcall(function() settingsControls.npcDropdown:SetEntries(entries, selected) end)
-    isRefreshingNpcDropdown = false
-    -- The closed box shows the NPC's name, or nothing if it isn't in the list.
-    if selected ~= nil and chosenMember ~= nil then
-        coverDropdownText(settingsControls.npcDropdown, true, labelOfEntry(chosenGroup, chosenMember))
-    else
-        coverDropdownText(settingsControls.npcDropdown, selected == nil)
-    end
+    return entries, selected, matchCount
+end
+
+local function showNpcMatchCount(matchCount)
     if NpcDirectory.done then
         settingsControls.matchCountText.content = matchCount == RESULTS_SHOWN
             and ("Showing the first " .. RESULTS_SHOWN .. " matches.") or (matchCount .. " matches.")
     else
         settingsControls.matchCountText.content = "Reading the game's NPCs: " .. #NpcDirectory.list .. " found so far..."
     end
+end
+
+local NPC_PLACEHOLDER = "Pick one of the matches"
+
+local function refreshNpcDropdown()
+    if settingsControls == nil then return end
+    local entries, selected, matchCount = npcEntriesFor(settingsControls.npcSearchBox:GetText())
+    isRefreshingNpcDropdown = true
+    pcall(function() settingsControls.npcDropdown:SetEntries(entries, selected) end)
+    isRefreshingNpcDropdown = false
+    -- The closed box doesn't show a selection made by code: the NPC chosen, or the placeholder, laid over it.
+    coverDropdownText(settingsControls.npcDropdown, true, selected and entries[selected].label or NPC_PLACEHOLDER)
+    showNpcMatchCount(matchCount)
 end
 
 -- Defined below.
@@ -421,22 +445,21 @@ local function buildSettingsControls(view, window)
         onChange = function() refreshNpcDropdown() end,
     })
     controls.matchCountText = view:AddText("")
-    controls.npcDropdown = view:AddComboBox({
-        entries = {},
-        onChange = function(_, entryID, _, eventType)
-            local npcGroup = groupsByEntryID[entryID]
-            if isRefreshingNpcDropdown or not isSelectionEvent(eventType) or npcGroup == nil then return end
-            coverDropdownText(controls.npcDropdown, false)
-            -- The first NPC of the name that matched the search, else the first of the group that has a head.
-            local matchedMember = matchedMembersByEntryID[entryID]
-            pickedGroup = npcGroup
-            local npcID = matchedMember and matchedMember.ids[1] or visibleIds(npcGroup)[1] or npcGroup.ids[1]
-            -- A member's name can be another group's.
-            local label = matchedMember and matchedMember.name or npcGroup.name
-            chooseNpc(npcID, "dropdown",
-                label == npcGroup.name and npcGroup or NpcDirectory.groupLabelled(npcID, label))
-        end,
-    })
+    local function onNpcSelection(entryID, eventType)
+        local npcGroup = groupsByEntryID[entryID]
+        if isRefreshingNpcDropdown or not isSelectionEvent(eventType) or npcGroup == nil then return end
+        coverDropdownText(controls.npcDropdown, false) -- (the box shows an entry clicked itself)
+        -- The first NPC of the name that matched the search, else the first of the group that has a head.
+        local matchedMember = matchedMembersByEntryID[entryID]
+        pickedGroup = npcGroup
+        local npcID = matchedMember and matchedMember.ids[1] or visibleIds(npcGroup)[1] or npcGroup.ids[1]
+        -- A member's name can be another group's.
+        local label = matchedMember and matchedMember.name or npcGroup.name
+        chooseNpc(npcID, "dropdown", label == npcGroup.name and npcGroup or NpcDirectory.groupLabelled(npcID, label))
+    end
+    -- The game's dropdown list in place of a combo box: no search bar of its own, so the search box above is the one.
+    controls.npcDropdown = DropdownList.replaceComboBox(view:AddComboBox({ entries = {} }), onNpcSelection,
+        NPC_PLACEHOLDER)
     showTextWhenClicked(controls.npcDropdown)
     view:AddSimpleButton("View variants", function() openVariantsWindow() end)
     view:AddSimpleButton("Browse all heads", function() openAllHeadsWindow() end)
@@ -484,14 +507,14 @@ local function buildSettingsControls(view, window)
             if isRefreshingAnimationDropdown or not isSelectionEvent(eventType) or selectedListing == nil then
                 return
             end
-            Settings.chosenAnimationID = selectedListing.id
+            Settings.chooseAnimation(selectedListing.id)
             coverDropdownText(controls.animationDropdown, false)
             animationChanged()
         end,
     })
     showTextWhenClicked(controls.animationDropdown)
     view:AddSimpleButton("Use default animation", function()
-        Settings.chosenAnimationID = nil
+        Settings.chooseAnimation(nil)
         animationChanged()
         refreshAnimationDropdown()
     end)
@@ -723,6 +746,8 @@ openAllHeadsWindow = function()
         if pluginLayer ~= nil then
             AllHeadsWindow.open(PrettyUI, pluginLayer, NpcDirectory.headsInNameOrder(visibleIds),
                 NpcDirectory.headsOfEachGroup(visibleIds), Settings.chosenNpcID, function(npcID, label)
+                    -- The search box is cleared, so the NPC dropdown lists (and shows) the head picked.
+                    if settingsControls then settingsControls.npcSearchBox:SetText("") end
                     chooseNpc(npcID, nil, NpcDirectory.groupLabelled(npcID, label))
                 end)
             refreshAnimationDropdown()
@@ -738,10 +763,8 @@ openHeadFlaggingWindow = function()
     if not NpcDirectory.regrouped then
         noticeText = "The NPCs are still being read."
     else
-        local succeeded, pluginLayer = pcall(function()
-            return ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
-        end)
-        if succeeded and pluginLayer ~= nil then
+        local pluginLayer = pluginBuildLayer()
+        if pluginLayer ~= nil then
             local heads = {}
             for _, npcID in ipairs(NpcDirectory.headsInNameOrder(visibleIds)) do heads[#heads + 1] = npcID end
             table.sort(heads)
@@ -765,10 +788,8 @@ local TINT_LISTED = { 0.10, 0.28, 0.12, 1 }     -- on the whitelist, listed in t
 local TINT_DUPLICATE = { 0.10, 0.17, 0.34, 1 }  -- on the whitelist as a duplicate
 
 local function showAnimationBrowser()
-    local succeeded, pluginLayer = pcall(function()
-        return ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
-    end)
-    if not (succeeded and pluginLayer ~= nil) then return false end
+    local pluginLayer = pluginBuildLayer()
+    if pluginLayer == nil then return false end
     local variantIDs, names, listed, duplicates = {}, {}, {}, {}
     for _, entry in ipairs(Animations.options(false)) do listed[entry.id] = true end
     for _, animID in ipairs(Whitelist.duplicates or {}) do duplicates[animID] = true end
@@ -803,29 +824,6 @@ local function showAnimationBrowser()
     return true
 end
 
--- TEMPORARY probe: do races (Goebies...) have chat animations of their own? Logs, once, every animation named for
--- chat or heads beyond the human sets, and every Goebie one. Remove once answered.
-local CHAT_PROBE_PER_LINE = 8
-local chatAnimationsLogged = false
-local function logChatAnimations()
-    if chatAnimationsLogged then return end
-    chatAnimationsLogged = true
-    local found = {}
-    for _, anim in ipairs(AnimationScan.list) do
-        local name = anim.name:upper()
-        local isHumanSet = name:find("^HUMAN_UPDATE_CHATHEAD") or name:find("^HUMAN_ACTOR_CHATHEAD")
-        if name:find("GOEBIE") or (not isHumanSet and (name:find("CHAT") or name:find("HEAD"))) then
-            found[#found + 1] = anim.id .. "=" .. anim.name
-        end
-    end
-    print(("[make_me_a_monster] CHATPROBE|begin|%d of %d animations"):format(#found, #AnimationScan.list))
-    for first = 1, #found, CHAT_PROBE_PER_LINE do
-        print("[make_me_a_monster] CHATPROBE|" .. table.concat(found, " ", first,
-            math.min(#found, first + CHAT_PROBE_PER_LINE - 1)))
-    end
-    print("[make_me_a_monster] CHATPROBE|end")
-end
-
 -- Reads every animation a few at a time (continueAnimationBrowser), then opens the window.
 openAnimationFlaggingWindow = function()
     animationBrowserWanted = true
@@ -842,23 +840,20 @@ local function continueAnimationBrowser()
         return
     end
     animationBrowserWanted = false
-    logChatAnimations()
     local opened = showAnimationBrowser()
     if settingsControls then settingsControls.noticeText.content = opened and "" or "The game screen isn't ready." end
 end
 
 -- What the debug windows' heads play, worked out at every fill so the heads follow the dropdown.
 local function playerVersionOfChosenAnimation()
-    return HeadSwap.animationForHead(Settings.chosenAnimationID or Animations.fallback, true)
+    return HeadSwap.animationForHead(HeadSwap.humanChoice() or Animations.fallback, true)
 end
 
 -- Debug: the blacklisted heads with the player's animations, to find heads built on the player's rig: a head that was
 -- blank with NPC animations but moves here belongs in Animations.headsOnPlayerRig.
 openBlacklistedHeadsWindow = function()
-    local succeeded, pluginLayer = pcall(function()
-        return ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
-    end)
-    if not (succeeded and pluginLayer ~= nil) then
+    local pluginLayer = pluginBuildLayer()
+    if pluginLayer == nil then
         if settingsControls then settingsControls.noticeText.content = "The game screen isn't ready." end
         return
     end
@@ -930,10 +925,8 @@ end
 
 -- Debug: the listed heads, newest models first, with the player's animations, to find newer heads on the player's rig.
 openNewestHeadsWindow = function()
-    local succeeded, pluginLayer = pcall(function()
-        return ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
-    end)
-    if not (succeeded and pluginLayer ~= nil) or not NpcDirectory.regrouped then
+    local pluginLayer = pluginBuildLayer()
+    if pluginLayer == nil or not NpcDirectory.regrouped then
         if settingsControls then settingsControls.noticeText.content = "The game screen isn't ready." end
         return
     end
@@ -969,17 +962,21 @@ openNewestHeadsWindow = function()
     if settingsControls then settingsControls.noticeText.content = "" end
 end
 
--- Debug: every listed head sorted by its models, for grouping them by hand (src/debug/head_grouping_window.lua).
+-- Debug: each set of animations of its own beside the human ones (src/debug/dedicated_animations_window.lua).
 openDedicatedAnimationsWindow = function()
     local pluginLayer = pluginBuildLayer()
-    local opened = pluginLayer ~= nil and DedicatedAnimationsWindow.open(PrettyUI, pluginLayer)
-    if settingsControls then
-        settingsControls.noticeText.content = opened and "" or "The dedicated animations window could not open."
+    local noticeText = ""
+    if pluginLayer == nil then
+        noticeText = "The game screen isn't ready."
+    elseif not DedicatedAnimationsWindow.open(PrettyUI, pluginLayer) then
+        noticeText = "No set of animations could be read."
     end
+    if settingsControls then settingsControls.noticeText.content = noticeText end
 end
 
+-- Debug: every listed head sorted by its models, for grouping them by hand (src/debug/head_grouping_window.lua).
 openHeadGroupingWindow = function()
-    local pluginLayer = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
+    local pluginLayer = pluginBuildLayer()
     if pluginLayer == nil or not NpcDirectory.regrouped then
         if settingsControls then settingsControls.noticeText.content = "The game screen isn't ready." end
         return
@@ -1135,6 +1132,7 @@ Event.GameStateChanged.Subscribe("make_me_a_monster_state", function(event)
         HeadSwap.start()
     elseif event.oldState == GameState.GAME then
         HeadSwap.reset()
+        DedicatedAnimationsWindow.close() -- (it plays on server ticks)
     end
 end)
 

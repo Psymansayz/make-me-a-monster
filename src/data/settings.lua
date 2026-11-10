@@ -7,7 +7,9 @@ local Settings = {}
 
 Settings.chosenNpcID = nil -- the NPC whose head replaces the player's
 Settings.lastSeenNpcAnimationID = nil     -- the chat animation last seen on a real NPC's head (learned)
-Settings.chosenAnimationID = nil -- the animation picked from the animation dropdown
+Settings.chosenAnimationID = nil -- the animation picked from the animation dropdown (set with chooseAnimation)
+-- The last human animation picked: a head outside the sets plays it when a set's animation picked has no human match.
+Settings.humanAnimationID = nil
 Settings.DEFAULT_HEAD_VIEW_DISTANCE = 2150
 Settings.headViewDistance = Settings.DEFAULT_HEAD_VIEW_DISTANCE
 Settings.variantsWidth = nil  -- the size the variants window was left at
@@ -40,17 +42,25 @@ local function savedNpc(settingKey)
     return npcName ~= nil and npcName ~= "" and GameIds.resolve("NPC", npcName) or nil
 end
 
--- The animation chosen: an empty string for the game's own animation, nothing saved yet for evil laugh.
-local function savedAnimation()
-    local animationName = PersistentDB:GetString("animName")
-    if animationName == nil then return Animations.fallback end
+-- An animation chosen: an empty string for the game's own animation, nothing saved yet for unsaved.
+local function savedAnimation(settingKey, unsaved)
+    local animationName = PersistentDB:GetString(settingKey)
+    if animationName == nil then return unsaved end
     return animationName ~= "" and Animations.idOf(animationName) or nil
+end
+
+-- A human animation chosen is also remembered as the last human one.
+function Settings.chooseAnimation(animationID)
+    Settings.chosenAnimationID = animationID
+    if Animations.setOf(animationID) == nil then Settings.humanAnimationID = animationID end
 end
 
 function Settings.load()
     Settings.chosenNpcID = savedNpc("npcName")
     Settings.lastSeenNpcAnimationID = savedInteger("animID")
-    Settings.chosenAnimationID = savedAnimation()
+    Settings.chosenAnimationID = savedAnimation("animName", Animations.fallback)
+    local chosenHuman = Animations.setOf(Settings.chosenAnimationID) == nil and Settings.chosenAnimationID or nil
+    Settings.humanAnimationID = savedAnimation("humanAnimName", chosenHuman)
     Settings.headViewDistance = savedInteger("headViewDistance") or Settings.DEFAULT_HEAD_VIEW_DISTANCE
     Settings.variantsWidth, Settings.variantsHeight = savedInteger("variantsWidth"), savedInteger("variantsHeight")
     Settings.galleryWidth, Settings.galleryHeight = savedInteger("galleryWidth"), savedInteger("galleryHeight")
@@ -67,12 +77,16 @@ local function npcNameOf(npcID)
     return npcID and GameIds.nameOf("NPC", npcID) or ""
 end
 
+local function animationNameOf(animationID)
+    return animationID and Animations.nameOf(animationID) or ""
+end
+
 -- The settings are only kept in memory until the plugin shuts down.
 function Settings.save()
     PersistentDB:SetString("npcName", npcNameOf(Settings.chosenNpcID))
     PersistentDB:SetInt("animID", Settings.lastSeenNpcAnimationID or -1)
-    local animationName = Settings.chosenAnimationID and Animations.nameOf(Settings.chosenAnimationID) or ""
-    PersistentDB:SetString("animName", animationName)
+    PersistentDB:SetString("animName", animationNameOf(Settings.chosenAnimationID))
+    PersistentDB:SetString("humanAnimName", animationNameOf(Settings.humanAnimationID))
     PersistentDB:SetInt("headViewDistance", Settings.headViewDistance)
     PersistentDB:SetInt("variantsWidth", Settings.variantsWidth or -1)
     PersistentDB:SetInt("variantsHeight", Settings.variantsHeight or -1)

@@ -49,26 +49,37 @@ local function isInterfaceOpen(interface)
     return interface ~= nil and ui.Interfaces:GetInterface(interface) ~= nil
 end
 
+-- The choice as a head outside the sets plays it: a set's animation becomes its human match, else the last human
+-- animation chosen (nil: the game's own).
+function HeadSwap.humanChoice()
+    local chosenAnimation = Settings.chosenAnimationID
+    local ownSet = Animations.setOf(chosenAnimation)
+    if ownSet == nil then return chosenAnimation end
+    return ownSet.toHuman[chosenAnimation] or Settings.humanAnimationID
+end
+
 -- The animation the NPC head with this id should play (in a dialogue box or a window).
 function HeadSwap.npcHeadAnimation(npcID, playerAnimationOfLine)
-    local chosenAnimation = Settings.chosenAnimationID
     local headSet = Animations.setOfHead(npcID)
     if headSet ~= nil then
-        local wanted = chosenAnimation or npcVersionOfGameAnimation or Settings.lastSeenNpcAnimationID
+        local wanted = Settings.chosenAnimationID or npcVersionOfGameAnimation or Settings.lastSeenNpcAnimationID
         return HeadSwap.animationForHead(wanted or Animations.npcFallback, false, headSet)
     end
+    local chosenAnimation = HeadSwap.humanChoice()
     if Animations.isOnPlayerRig(npcID) then
         if chosenAnimation ~= nil then return HeadSwap.animationForHead(chosenAnimation, true) end
         if playerAnimationOfLine ~= nil and playerAnimationOfLine >= 0 then return playerAnimationOfLine end
         return Animations.neutral
     end
     if chosenAnimation ~= nil then return HeadSwap.animationForHead(chosenAnimation, false) end
-    return npcVersionOfGameAnimation or Settings.lastSeenNpcAnimationID or Animations.npcFallback
+    -- (the last seen can be a set's animation, from an NPC of a set)
+    local gameAnimation = npcVersionOfGameAnimation or Settings.lastSeenNpcAnimationID or Animations.npcFallback
+    return HeadSwap.animationForHead(gameAnimation, false)
 end
 
 -- The animation the player's own head plays for the animation chosen.
 function HeadSwap.playerHeadAnimation(withNeutral)
-    local chosenAnimation = Settings.chosenAnimationID
+    local chosenAnimation = HeadSwap.humanChoice()
     if chosenAnimation == nil then return withNeutral and Animations.neutral or nil end
     -- (never an NPC animation: it is changed to the player's version)
     return HeadSwap.animationForHead(chosenAnimation, true)
@@ -79,14 +90,16 @@ end
 function HeadSwap.animationForHead(animationID, forPlayerHead, headSet)
     if animationID == nil then return nil end
     local ownSet = Animations.setOf(animationID)
+    -- Another set's animation goes by its human match, else the last human animation chosen.
+    local humanVersion = animationID
+    if ownSet ~= nil then humanVersion = ownSet.toHuman[animationID] or Settings.humanAnimationID end
     if headSet ~= nil then
         if ownSet == headSet then return animationID end
-        local humanVersion = ownSet and ownSet.toHuman[animationID] or nil
-        if ownSet == nil then humanVersion = HeadSwap.animationForHead(animationID, false) end
+        humanVersion = HeadSwap.animationForHead(humanVersion, false)
         if headSet.alsoHuman and humanVersion ~= nil then return humanVersion end
         return humanVersion and headSet.fromHuman[humanVersion] or headSet.default
     end
-    if ownSet ~= nil then animationID = ownSet.toHuman[animationID] or Animations.npcFallback end
+    animationID = humanVersion or Animations.npcFallback
     local isPlayerAnimation = Animations.isPlayerAnimation(animationID)
     if forPlayerHead then
         if isPlayerAnimation then return animationID end

@@ -1,10 +1,7 @@
--- Chat-head animations made for one race or character (dedicated animations): the heads of those races play only
--- these. Each set: its heads (by constant); its animations as { name, label, the listed human animation for the same
--- emotion (used when going back to an ordinary head), if there is one }; fromHuman, { listed human animation, the
--- animation it becomes on these heads } (else default); sameAs, { another length of a listed animation, the listed
--- one }: played as it is on these heads, mapped as the listed one elsewhere; alsoHuman, the human animations are
--- played too. Made by a script from the animation probe's list and the hand-made head groups (on dev); the dedicated
--- animations window (dev) shows them. A head in several sets belongs to the first.
+-- Chat-head animations of a race or character's own, which its heads play in place of the human ones (alsoHuman: as
+-- well as them). Each set: heads (constants); animations { name, label, the human animation for the same emotion };
+-- fromHuman { human animation, the set's version }, else default; sameAs { another length, the listed animation }.
+-- A head in several sets plays the first. Generated from the game's animation names; checked in game by hand.
 return {
     {
         name = "Troll",
@@ -251,10 +248,10 @@ return {
             "MM_MONKEY_GUARD", "MM_MONKEY_CHILD", "MONKEY", "THRANTAX", "ZAMORAKGHOST", "SCARED_SKAVID", "MAD_SKAVID",
             "SKAVIDTALKER1", "SKAVIDTALKER2", "SKAVIDTALKER3", "SKAVIDTALKER4", "MM_DUGOPUL", "MM_TREFAJI",
             "MM_ABERAB", "MM_SOLIHIB", "MM_DAGA", "MM_TUTAB", "MM_IFABA", "MM_HAMAB", "MM_HAFUBA", "MM_DENADU",
-            "MM_LOFU", "MM_KRUK", "MM_DUKE", "MM_OIPUIS", "MM_UYORO", "MM_OUHAI", "MM_UODAI", "MM_PADULAH", "MM_UWOGO",
-            "MM_MUROWOI", "MM_SLEEPING_MONKEY_GUARD", "MM_MONKEYS_UNCLE", "MM_MONKEYS_AUNT", "MM_MONKEY_ARCHER",
-            "MM_RAVINE_ARCHER", "MM_POSTED_ARCHER", "MM_RELIGIOUS_GUARD", "MM_RELIGIOUS_TRAPDOOR_GUARD",
-            "MM_ELDER_GUARD_1", "MM_ZOO_MONKEY", "MM_FREED_ZOO_MONKEY", "MM_BONZARA",
+            "MM_LOFU", "MM_KRUK", "MM_DUKE", "MM_OIPUIS", "MM_UYORO", "MM_OUHAI", "MM_UODAI", "MM_PADULAH",
+            "MM_AWOWOGEI_CUTSCENE", "MM_UWOGO", "MM_MUROWOI", "MM_SLEEPING_MONKEY_GUARD", "MM_MONKEYS_UNCLE",
+            "MM_MONKEYS_AUNT", "MM_MONKEY_ARCHER", "MM_RAVINE_ARCHER", "MM_POSTED_ARCHER", "MM_RELIGIOUS_GUARD",
+            "MM_RELIGIOUS_TRAPDOOR_GUARD", "MM_ELDER_GUARD_1", "MM_ZOO_MONKEY", "MM_FREED_ZOO_MONKEY", "MM_BONZARA",
             "MM_TRANSMOGRIFICATION_SMALL_NINJA_MONKEY", "MM_TRANSMOGRIFICATION_MEDIUM_NINJA_MONKEY",
             "MM_TRANSMOGRIFICATION_NORMAL_GORILLA", "MM_TRANSMOGRIFICATION_BEARDED_GORILLA",
             "MM_TRANSMOGRIFICATION_ANCIENT_MONKEY", "MM_TRANSMOGRIFICATION_SMALL_ZOMBIE_MONKEY",
@@ -262,19 +259,20 @@ return {
             "HAUNTEDMINE_BOSS_GHOST", "MALAK", "ICS_LITTLE_SPECTRE_VIS", "LORE_XMAS11_REWARD_TINSEL_SNAKE",
             "MAGIC_CARPET_MONKEY", "MAGICTRAINING_GUARD_ENTRANCE", "MAGICTRAINING_GUARD_TELE",
             "MAGICTRAINING_GUARD_ALCHEM", "MAGICTRAINING_GUARD_ENCHA", "MAGICTRAINING_GUARD_GRAVE",
-            "MAGICTRAINING_GUARD_REWARDS", "FAIRY_SHEEP", "FAIRY_SHEEPSHEERED", "HUNDRED_ILM_MIZARU",
-            "HUNDRED_ILM_KIKAZARU", "HUNDRED_ILM_IWAZARU", "HARMLESS_ISLAND_MONKEY", "BREW_MONKEY", "BREW_BLUE_MONKEY",
-            "BREW_RED_MONKEY", "FAIRY_SHEEP2", "PNR_MONKEY_TASK_NINJA_MONKEY", "EASTER08_SNAILS", "SWEPT_SNAIL",
-            "TG08_TURK_0", "TG08_TURK_1", "TG08_TURK_2", "TG08_TURK_3", "TG08_TURK_4", "TG08_TURK_5", "TG08_TURK_6",
-            "TG08_TURK_7", "TG08_TURK_8", "TG08_TURK_9", "TG11_TURKEY_MATT_CUTSCENE", "RM_RUNE_GUARDIAN",
-            "STRYKEWYRM_ICE", "STRYKEWYRM_DESERT", "STRYKEWYRM", "APMEKEN_WARRIOR_MONKEY_UNARMED",
-            "APMEKEN_WARRIOR_MONKEY_ARMED", "APMEKEN_WARRIOR_MONKEY_ARMED_ELITE", "APMEKEN_COLONY_MONKEY1",
-            "APMEKEN_GHOST_MONKEY1", "APMEKEN_MM_MONKEY_TARGET", "APMEKEN_MM_MONKEY_NORMAL",
-            "APMEKEN_SPEAK_NO_PASSIVE", "APMEKEN_SEE_NO_PASSIVE", "APMEKEN_HEAR_NO_PASSIVE",
-            "APMEKEN_MONKEY_BANANA_FOLLOWER", "APMEKEN_GORILLA_GUARD", "CMTOOL_MONKEY_ARCHER", "CMTOOL_MONKEY_GUARD",
-            "CMTOOL_TURKEY", "TG08_TURK_10", "TG08_TURK_11", "TG08_TURK_12", "TG08_TURK_13", "TG08_TURK_14",
-            "TG08_TURK_15", "TG08_TURK_16", "TG08_TURK_17", "TG08_TURK_18", "TG08_TURK_19", "LORE_SS_ICE_STRYKEWYRM",
-            "MTX_PET_RHINO_WHITE", "POH_SS_DESERT_STRYKEWYRM", "POH_SS_JUNGLE_STRYKEWYRM", "POH_SS_WILDY_STRYKEWYRM",
+            "MAGICTRAINING_GUARD_REWARDS", "FAIRY_SHEEP", "FAIRY_SHEEPSHEERED", "_100_MM_AWOWOGEI_CUTSCENE",
+            "_100_MM_AWOWOGEI_CUTSCENE_WANDER", "HUNDRED_ILM_MIZARU", "HUNDRED_ILM_KIKAZARU", "HUNDRED_ILM_IWAZARU",
+            "HARMLESS_ISLAND_MONKEY", "BREW_MONKEY", "BREW_BLUE_MONKEY", "BREW_RED_MONKEY", "FAIRY_SHEEP2",
+            "PNR_MONKEY_TASK_NINJA_MONKEY", "EASTER08_SNAILS", "SWEPT_SNAIL", "TG08_TURK_0", "TG08_TURK_1",
+            "TG08_TURK_2", "TG08_TURK_3", "TG08_TURK_4", "TG08_TURK_5", "TG08_TURK_6", "TG08_TURK_7", "TG08_TURK_8",
+            "TG08_TURK_9", "TG11_TURKEY_MATT_CUTSCENE", "RM_RUNE_GUARDIAN", "STRYKEWYRM_ICE", "STRYKEWYRM_DESERT",
+            "STRYKEWYRM", "APMEKEN_WARRIOR_MONKEY_UNARMED", "APMEKEN_WARRIOR_MONKEY_ARMED",
+            "APMEKEN_WARRIOR_MONKEY_ARMED_ELITE", "APMEKEN_COLONY_MONKEY1", "APMEKEN_GHOST_MONKEY1",
+            "APMEKEN_MM_MONKEY_TARGET", "APMEKEN_MM_MONKEY_NORMAL", "APMEKEN_SPEAK_NO_PASSIVE",
+            "APMEKEN_SEE_NO_PASSIVE", "APMEKEN_HEAR_NO_PASSIVE", "APMEKEN_MONKEY_BANANA_FOLLOWER",
+            "APMEKEN_GORILLA_GUARD", "CMTOOL_MONKEY_ARCHER", "CMTOOL_MONKEY_GUARD", "CMTOOL_TURKEY", "TG08_TURK_10",
+            "TG08_TURK_11", "TG08_TURK_12", "TG08_TURK_13", "TG08_TURK_14", "TG08_TURK_15", "TG08_TURK_16",
+            "TG08_TURK_17", "TG08_TURK_18", "TG08_TURK_19", "LORE_SS_ICE_STRYKEWYRM", "MTX_PET_RHINO_WHITE",
+            "POH_SS_DESERT_STRYKEWYRM", "POH_SS_JUNGLE_STRYKEWYRM", "POH_SS_WILDY_STRYKEWYRM",
             "POH_SS_GANODERMIC_RUNT", "_6AWE3_CAMP_MONKEY", "POH_AQUA_SHARK_PET", "POH_AQUA_SHARK_PET_POH",
             "COMSCENARIO_MARIMBO_RANGED", "GOEBIE1_SPIRIT_GUARDIAN", "MM16_SOCK_PUPPET", "ELR1_KILL_CAMP_MONKEY",
             "SKILLPETS_RUNECRAFT", "CRUC_DM_ASSASIN_KEV", "TG08_TURK_20", "TG08_TURK_21", "TG08_TURK_22",
@@ -522,6 +520,7 @@ return {
     },
     {
         name = "Easter bird",
+        alsoHuman = true,
         default = "EASTER09_BIRD_SLEEPING_CHAT",
         heads = {
             "EASTER09_BIRD_ASLEEP",

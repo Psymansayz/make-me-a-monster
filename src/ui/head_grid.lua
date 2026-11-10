@@ -1,4 +1,4 @@
--- A window of chat heads in a paged grid (the "all heads" and "variants" windows). The cells are made once and reused
+-- A window of chat heads in a paged grid (the "all heads" and "variants" windows, and the debug windows). The cells are made once and reused
 -- for every page. Heads aren't drawn in their own windows to avoid graphical errors.
 --
 -- Models aren't clipped by a scroll area: so pages, not scrolling.
@@ -10,8 +10,9 @@
 -- HeadGrid.open(PrettyUI, parent, options) -> the grid, or nil. options: title; columns, rows; ids; current;
 --   minWidth; savedWidth/Height/X/Y; page (else the page of the head in use); withSearch;
 --   toggle = { text, selected, onChange(selected) } (a check box, with withSearch);
---   extraButton = { text, onClick() } (a button at the row's end, without withSearch: no text, no button);
+--   extraButton = { text, onClick() } (a button at the row's end, without withSearch; hidden without a text);
 --   numberBox = { placeholder, onSubmit(number) } (a number field after Next, without withSearch);
+--   marksPick = false (a head clicked is not marked as the one in use);
 --   nameOf(id, position); isPlayerHead(id); animationFor(id, position) (position: the head's place in ids, for a head
 --   listed more than once); pageLabel(page, pages, shown); onPick(id); onSearch(text);
 --   onPlacement(width, height, x, y); onClosed().
@@ -160,10 +161,10 @@ function HeadGrid:paintCell(cell, hovered)
     cell.background.colour = hovered and HOVER or (cell.id == self.current and CURRENT or BACKGROUND)
 end
 
-function HeadGrid:pick(npcID)
-    self.current = npcID
-    self.onPick(npcID)
-    for _, cell in ipairs(self.cells) do self:paintCell(cell, cell.id == npcID) end
+function HeadGrid:pick(pickedCell)
+    if self.marksPick then self.current = pickedCell.id end
+    self.onPick(pickedCell.id)
+    for _, cell in ipairs(self.cells) do self:paintCell(cell, cell == pickedCell) end
 end
 
 function HeadGrid:makeCell(position)
@@ -191,7 +192,7 @@ function HeadGrid:makeCell(position)
     cell.click.clickthrough = false
     cell.click:Subscribe(ui.Hook.ONMOUSEOVER, function() self:paintCell(cell, true) end)
     cell.click:Subscribe(ui.Hook.ONMOUSELEAVE, function() self:paintCell(cell, false) end)
-    cell.click:Subscribe(ui.Hook.ONCLICK, function() if cell.id ~= nil then self:pick(cell.id) end end)
+    cell.click:Subscribe(ui.Hook.ONCLICK, function() if cell.id ~= nil then self:pick(cell) end end)
     setCellHidden(cell, true)
 end
 
@@ -327,6 +328,7 @@ function HeadGrid.open(PrettyUI, parent, options)
         onSearch = options.onSearch,
         onPlacement = options.onPlacement or function() end,
         onClosed = options.onClosed or function() end,
+        marksPick = options.marksPick ~= false,
         cells = {}, nav = {}, closed = false, page = options.page, simpleButton = PrettyUI.SimpleButton,
     }, HeadGrid)
     -- As it was left, else the default; kept on the screen.
@@ -392,29 +394,23 @@ function HeadGrid.open(PrettyUI, parent, options)
     local buttonOptions = { width = NAV_BUTTON }
     nav.previous = PrettyUI.SimpleButton.new(content, "Previous", function() self:changePage(-1) end, buttonOptions)
     nav.after = PrettyUI.SimpleButton.new(content, "Next", function() self:changePage(1) end, buttonOptions)
+    local function numberField(placeholder, onNumber)
+        return PrettyUI.TextField.new(content, {
+            width = NAV_NUMBER, height = 30, placeholder = placeholder, filterMode = ui.InputFieldFilterMode.NUMERIC,
+            onSubmit = function(_, text)
+                local number = tonumber(text)
+                if number ~= nil and not self.closed then onNumber(math.floor(number)) end
+            end,
+        })
+    end
     if options.withSearch then
         nav.search = PrettyUI.TextField.new(content, {
             width = 204, height = 30, placeholder = "Search name or id",
             onChange = function(_, _, text) if not self.closed then self.onSearch(text) end end,
         })
-        nav.jump = PrettyUI.TextField.new(content, {
-            width = 70, height = 30, placeholder = "Page", filterMode = ui.InputFieldFilterMode.NUMERIC,
-            onSubmit = function(_, text)
-                local page = tonumber(text)
-                if page ~= nil and not self.closed then self:changePage(math.floor(page) - self.page) end
-            end,
-        })
+        nav.jump = numberField("Page", function(page) self:changePage(page - self.page) end)
     end
-    if options.numberBox then
-        nav.number = PrettyUI.TextField.new(content, {
-            width = NAV_NUMBER, height = 30, placeholder = options.numberBox.placeholder,
-            filterMode = ui.InputFieldFilterMode.NUMERIC,
-            onSubmit = function(_, text)
-                local number = tonumber(text)
-                if number ~= nil and not self.closed then options.numberBox.onSubmit(math.floor(number)) end
-            end,
-        })
-    end
+    if options.numberBox then nav.number = numberField(options.numberBox.placeholder, options.numberBox.onSubmit) end
     if options.extraButton then
         nav.extra = PrettyUI.SimpleButton.new(content, "", function()
             if not self.closed then options.extraButton.onClick() end

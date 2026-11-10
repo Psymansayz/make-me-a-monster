@@ -1,8 +1,7 @@
--- Debug only: for each race or character with chat animations of its own (src/data/dedicated_animations.lua), one
--- of its heads twice: the human animation for an emotion on the left, its own animation on the right. Every few
--- seconds the next animation plays, on the next of the set's heads. A page per set. A model number entered holds
--- that head (the animations go on) until "Cycle models". Clicking a head logs it (DEDICATED|head|), for tracking
--- broken heads in a set that works.
+-- Debug only: a page per set of animations of its own (src/data/dedicated_animations.lua), showing one of its heads
+-- twice: the human animation for an emotion on the left, the set's on the right. Every few seconds the next
+-- animation plays on the next head. A model number entered holds that head until "Cycle models". Clicking a head
+-- logs it (DEDICATED|head|), to find the heads of a working set that don't play it.
 
 local HeadGrid = require("src/ui/head_grid")
 local Blacklist = require("src/data/head_blacklist")
@@ -104,26 +103,30 @@ local function pairAt(position)
     return set.pairs[step], isHuman
 end
 
+-- Shows the shown set's head and animation now. A cell given another head starts its animation as it is filled;
+-- one keeping its head is given it after (setting it twice would load the model twice).
+local function refresh()
+    local headBefore = headIDs[shownSet.page * 2]
+    showHead(shownSet, headIndex)
+    grid.window:SetTitle(titleOf(shownSet))
+    grid:showPage()
+    if headIDs[shownSet.page * 2] == headBefore then grid:updateAnimations() end
+end
+
 local function onTick()
     ticks = ticks + 1
     if ticks < TICKS_PER_ANIMATION then return end
     ticks = 0
     step = step % #shownSet.pairs + 1
     if not headHeld then headIndex = headIndex % #shownSet.heads + 1 end
-    showHead(shownSet, headIndex)
-    grid.window:SetTitle(titleOf(shownSet))
-    grid:showPage()
-    grid:updateAnimations()
+    refresh()
 end
 
 -- Holds the set's head with this number (kept within the set); the animations go on cycling.
 local function jumpToModel(number)
     headIndex, headHeld = math.max(1, math.min(#shownSet.heads, number)), true
-    showHead(shownSet, headIndex)
-    grid.window:SetTitle(titleOf(shownSet))
     grid:setExtraButton(RESUME_TEXT)
-    grid:showPage()
-    grid:updateAnimations()
+    refresh()
 end
 
 -- The heads cycle again, on from the one held.
@@ -169,6 +172,7 @@ function DedicatedAnimationsWindow.open(PrettyUI, parent)
             return ("Set %d of %d, animation %d of %d"):format(page, pages, step, #shownSet.pairs)
         end,
         onPick = logHead,
+        marksPick = false, -- (both cells hold the same head)
         onPlacement = function(width, height, x, y)
             placement.width, placement.height, placement.x, placement.y = width, height, x, y
         end,
