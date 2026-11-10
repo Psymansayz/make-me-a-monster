@@ -39,7 +39,8 @@ local function idPairs(namePairs)
     end
     return idTable
 end
--- An NPC head animation's player version, and the other way round (one several twins name is settled by alsoFor).
+-- An NPC head animation's player version, and the other way round; alsoFor picks the NPC version of a player animation
+-- that several NPC ones name.
 local playerTwin = idPairs(AnimationList.twin)
 local npcTwin = {}
 for npcAnimation, playerAnimation in pairs(playerTwin) do npcTwin[playerAnimation] = npcAnimation end

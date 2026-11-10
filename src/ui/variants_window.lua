@@ -49,7 +49,7 @@ end
 
 -- No text, no button.
 function VariantsWindow.setButton(text)
-    if grid then grid:setExtraButton(text) end
+    if VariantsWindow.isOpen() then grid:setExtraButton(text) end
 end
 
 local function isPlayerHead(npcID)
@@ -61,27 +61,28 @@ local function animationFor(npcID)
     return AnimationChoice.npcHeadAnimation(npcID)
 end
 
-function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPick, labelFor, view)
-    view = view or {}
-    onButton = view.onButton
-    local function nameOf(npcID) return labelFor and labelFor(npcID) or nil end
+-- options: title, ids, current, onPick(id), nameOf(id) (or none), page (else that of current), buttonText and
+-- onButton() (the button under the heads; no text, no button).
+function VariantsWindow.open(PrettyUI, parent, options)
+    onButton = options.onButton
+    local nameOf = options.nameOf or function() return nil end
     -- Already open: its cells are reused, as for a page change.
-    if grid then
-        grid.onPick, grid.nameOf = onPick, nameOf
-        grid:setHeads(variantIDs, current, title, view.page)
-        grid:setExtraButton(view.buttonText)
+    if VariantsWindow.isOpen() then
+        grid.onPick, grid.nameOf = options.onPick, nameOf
+        grid:setHeads(options.ids, options.current, options.title, options.page)
+        grid:setExtraButton(options.buttonText)
         return
     end
     grid = HeadGrid.open(PrettyUI, parent, {
-        title = title, columns = 3, rows = 3, minWidth = MIN_WIDTH,
-        ids = variantIDs, current = current, page = view.page,
-        extraButton = { text = view.buttonText, onClick = function() if onButton then onButton() end end },
+        title = options.title, columns = 3, rows = 3, minWidth = MIN_WIDTH,
+        ids = options.ids, current = options.current, page = options.page,
+        extraButton = { text = options.buttonText, onClick = function() if onButton then onButton() end end },
         placement = Settings.windows.variants,
         nameOf = nameOf, isPlayerHead = isPlayerHead, animationFor = animationFor,
         pageLabel = function(page, pages, shown)
             return ("Page %d of %d (%d variants)"):format(page, pages, shown)
         end,
-        onPick = onPick,
+        onPick = options.onPick,
         onClosed = function()
             -- (with the player's own head in use, the page is not that of the NPC remembered)
             if Settings.chosenNpcID ~= nil then Settings.variantsPage = grid.page end

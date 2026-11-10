@@ -1,6 +1,5 @@
--- Replaces the player's chat head in the game's dialogue boxes with an NPC's head.
--- A box is handled once, when it opens, and again when the player changes the head,
--- the animation or the size.
+-- Replaces the player's chat head in the game's dialogue boxes with an NPC's head. A box is handled once, when it
+-- opens, and again when the player changes the head, the animation or the size.
 
 local AnimationChoice = require("src/game/animation_choice")
 local Settings = require("src/data/settings")
@@ -32,7 +31,6 @@ local PAIR_HEADS = headComponents("CHAT_V2_PAIR__CHATHEAD_LEFT", "CHAT_V2_PAIR__
 local PLAYER_HEAD_MODEL_TYPE = ui.ModelType.PLAYER_HEAD
 local NPC_HEAD_MODEL_TYPE = ui.ModelType.NPC_HEAD
 
--- Whether an interface is open now (checked first, so a closed box costs nothing more).
 local function isInterfaceOpen(interface)
     return interface ~= nil and ui.Interfaces:GetInterface(interface) ~= nil
 end
@@ -46,7 +44,7 @@ end
 local function learnNpcSpeechAnimation(component)
     if component.visibleGlobal == true and tonumber(component.modelType) == NPC_HEAD_MODEL_TYPE then
         local animationID = tonumber(component.animID)
-        if animationID ~= nil and animationID >= 0 then Settings.lastSeenNpcAnimationID = animationID end
+        if animationID ~= nil and animationID >= 0 then AnimationChoice.noteNpcAnimation(animationID) end
     end
 end
 
@@ -219,7 +217,8 @@ local function stopListeningIfNoBoxHandled()
     listeningForUpdates = false
 end
 
--- The game may fill a box's head only after the box is seen open: so the boxes are checked again for a few frames.
+-- A box just opened: its player heads swapped, or the NPC's animation noted. The game may fill a box's head only after
+-- the box is seen open: so the boxes are checked again for a few frames.
 local function handleBox(interface)
     local heads = HEADS_OF_BOX[interface]
     if heads ~= nil then

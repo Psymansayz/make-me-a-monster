@@ -1,4 +1,4 @@
--- The settings, saved in PersistentDB (shared by all clients in this install)
+-- The settings, saved in PersistentDB (shared by all clients in this install).
 
 local Animations = require("src/game/animations")
 local GameIds = require("src/game/game_ids")
@@ -33,16 +33,10 @@ end
 local WINDOW_KEY_PREFIXES = { variants = "variants", allHeads = "gallery", settings = "settings" }
 local PLACEMENT_KEY_SUFFIXES = { x = "X", y = "Y", width = "Width", height = "Height" }
 
--- An NPC saved by its name in the game, or nil.
-local function savedNpc(settingKey)
-    local npcName = PersistentDB:GetString(settingKey)
-    return npcName ~= nil and npcName ~= "" and GameIds.resolve("NPC", npcName) or nil
-end
-
--- An animation saved by its name in the game, or nil.
-local function savedSeq(settingKey)
-    local animationName = PersistentDB:GetString(settingKey)
-    return animationName ~= nil and animationName ~= "" and GameIds.resolve("Seq", animationName) or nil
+-- A config (an NPC, an animation) saved by its name in the game, or nil.
+local function savedConfig(kind, settingKey)
+    local configName = PersistentDB:GetString(settingKey)
+    return configName ~= nil and configName ~= "" and GameIds.resolve(kind, configName) or nil
 end
 
 -- An animation chosen: an empty string for the game's own animation, nothing saved yet for unsaved.
@@ -59,8 +53,8 @@ function Settings.chooseAnimation(animationID)
 end
 
 function Settings.load()
-    Settings.chosenNpcID = savedNpc("npcName")
-    Settings.lastSeenNpcAnimationID = savedSeq("lastSeenAnimName")
+    Settings.chosenNpcID = savedConfig("NPC", "npcName")
+    Settings.lastSeenNpcAnimationID = savedConfig("Seq", "lastSeenAnimName")
     Settings.chosenAnimationID = savedAnimation("animName", Animations.fallback)
     local chosenHuman = Animations.setOf(Settings.chosenAnimationID) == nil and Settings.chosenAnimationID or nil
     Settings.humanAnimationID = savedAnimation("humanAnimName", chosenHuman)
@@ -70,7 +64,7 @@ function Settings.load()
         for field, suffix in pairs(PLACEMENT_KEY_SUFFIXES) do placement[field] = savedInteger(prefix .. suffix) end
     end
     Settings.oneHeadPerGroup = savedInteger("oneHeadPerGroup") ~= 0
-    Settings.variantsNpcID = savedNpc("variantsNpcName")
+    Settings.variantsNpcID = savedConfig("NPC", "variantsNpcName")
     Settings.variantsGroup = PersistentDB:GetString("variantsGroup")
     Settings.variantsPage = savedInteger("variantsPage")
 end
@@ -114,11 +108,6 @@ function Settings.setHeadSizePercent(sliderValue)
     percent = math.max(limits.min, math.min(limits.max, percent))
     Settings.headViewDistance = math.max(1, math.floor(Settings.DEFAULT_HEAD_VIEW_DISTANCE * 100 / percent + 0.5))
     return percent
-end
-
--- How many times larger than normal the heads are drawn (used by dev's debug windows).
-function Settings.headScaleMultiplier()
-    return Settings.DEFAULT_HEAD_VIEW_DISTANCE / Settings.headViewDistance
 end
 
 return Settings

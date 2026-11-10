@@ -14,6 +14,11 @@ function AnimationChoice.noteGameAnimation(playerAnimationID)
     npcVersionOfGameAnimation = Animations.npcTwinOf(playerAnimationID)
 end
 
+-- A real NPC's head played this animation in a dialogue box: what the NPC heads play while nothing is chosen.
+function AnimationChoice.noteNpcAnimation(animationID)
+    Settings.lastSeenNpcAnimationID = animationID
+end
+
 -- Logout: the game's last animation no longer counts.
 function AnimationChoice.forgetGameAnimation()
     npcVersionOfGameAnimation = nil
@@ -29,25 +34,27 @@ function AnimationChoice.setInUse()
     return Animations.setOfHead(Settings.chosenNpcID)
 end
 
--- The choice as a head outside the sets plays it: a set's animation becomes its human match, else the last human
+-- An animation as a head outside the sets plays it: a set's animation becomes its human match, else the last human
 -- animation chosen (nil: the game's own).
+local function humanVersionOf(animationID)
+    local ownSet = Animations.setOf(animationID)
+    if ownSet == nil then return animationID end
+    return ownSet.toHuman[animationID] or Settings.humanAnimationID
+end
+
+-- The choice as a head outside the sets plays it.
 function AnimationChoice.humanChoice()
-    local chosenAnimation = Settings.chosenAnimationID
-    local ownSet = Animations.setOf(chosenAnimation)
-    if ownSet == nil then return chosenAnimation end
-    return ownSet.toHuman[chosenAnimation] or Settings.humanAnimationID
+    return humanVersionOf(Settings.chosenAnimationID)
 end
 
 -- The animation to keep when the head changes between the new player model heads, old NPC heads and the heads of a
 -- set with animations of its own (headSet): the same emotion where the other kind has it, else a default.
 function AnimationChoice.animationForHead(animationID, forPlayerHead, headSet)
     if animationID == nil then return nil end
-    local ownSet = Animations.setOf(animationID)
-    -- Another set's animation goes by its human match, else the last human animation chosen.
-    local humanVersion = animationID
-    if ownSet ~= nil then humanVersion = ownSet.toHuman[animationID] or Settings.humanAnimationID end
+    -- Another set's animation goes by its human version.
+    local humanVersion = humanVersionOf(animationID)
     if headSet ~= nil then
-        if ownSet == headSet then return animationID end
+        if Animations.setOf(animationID) == headSet then return animationID end
         humanVersion = AnimationChoice.animationForHead(humanVersion, false)
         if headSet.alsoHuman and humanVersion ~= nil then return humanVersion end
         return humanVersion and headSet.fromHuman[humanVersion] or headSet.default
@@ -99,9 +106,9 @@ function AnimationChoice.shown(npcHeads)
     return AnimationChoice.animationForHead(shownAnimation, false, headSet)
 end
 
--- Keeps the choice one the head in use can play, and clears a saved one no longer listed; whether it changed. A head
--- of a set plays its version of the choice, kept as it is for the other heads; a set's animation becomes a human one
--- back on a head outside the sets. While the heads window shows NPC heads, the player's animation stays as it is.
+-- Keeps the animation chosen one the head in use can play, clearing a saved one no longer listed; whether it changed.
+-- (A head of a set keeps the choice, playing its own version. While the heads window shows NPC heads, the player's
+-- animation is left as it is.)
 function AnimationChoice.fitToHead(allHeadsWindowOpen)
     local chosenBefore = Settings.chosenAnimationID
     local playerAnimations = AnimationChoice.playerAnimationsInUse()

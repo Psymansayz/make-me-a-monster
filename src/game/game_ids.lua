@@ -4,8 +4,9 @@
 
 local GameIds = {}
 
--- "<kind>.<name>" for every name the game did not know, for dev's reports; nil (set so by main's main.lua) notes none.
-GameIds.unresolved = {}
+-- "<kind>.<name>" for each name the game did not know, kept only once something sets it to a list (dev, for its
+-- reports, before anything is looked up).
+GameIds.unresolved = nil
 
 local function noteUnresolved(text)
     if GameIds.unresolved ~= nil then GameIds.unresolved[#GameIds.unresolved + 1] = text end

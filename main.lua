@@ -9,14 +9,12 @@ local VariantsWindow = require("src/ui/variants_window")
 local AllHeadsWindow = require("src/ui/all_heads_window")
 local SettingsView = require("src/ui/settings_view")
 local WindowPlacement = require("src/ui/window_placement")
-local GameIds = require("src/game/game_ids")
 
 local PrettyUI = prettyui
 
 -- The settings are read once, here, and written at shutdown.
 Settings.load()
 HeadSwap.start()
-GameIds.unresolved = nil -- (the names the game didn't know are only reported on dev)
 
 -- The client's require keeps every file it loaded for good, and the plugin can't reach that cache: so a data file read
 -- only once is emptied after it is converted, and its contents freed. (Not on dev: its debug windows read them again.)
@@ -39,11 +37,13 @@ local function animationChanged()
     SettingsView.refreshStatusTexts()
 end
 
--- The animation chosen fitted to the head in use, and the animation dropdown to both.
+-- The animation chosen fitted to the head in use, and the animation dropdown and status texts to both; whether the
+-- animation changed (then everything following it was refreshed too).
 local function refitAnimation()
     local changed = AnimationChoice.fitToHead(AllHeadsWindow.isOpen())
     SettingsView.refreshAnimationDropdown()
-    if changed then animationChanged() end
+    if changed then animationChanged() else SettingsView.refreshStatusTexts() end
+    return changed
 end
 
 -- A head can be in several groups: the one the head chosen was picked from, kept for this session.
@@ -67,16 +67,10 @@ local function chooseNpc(npcID, chosenFrom, selectedGroup)
     Settings.chosenNpcID = npcID
     if chosenFrom == nil then pickedGroup = selectedGroup end
     if selectedGroup ~= nil then VariantsWindow.selectGroup(npcID, selectedGroup) end
-    local animationRefitted = AnimationChoice.fitToHead(AllHeadsWindow.isOpen())
-    SettingsView.refreshAnimationDropdown()
+    local animationRefitted = refitAnimation()
     if chosenFrom ~= "dropdown" then SettingsView.refreshNpcDropdown() end
     if chosenFrom ~= "variants" and VariantsWindow.isOpen() then openVariantsWindow() end
-    if animationRefitted then
-        AllHeadsWindow.updateAnimations()
-        VariantsWindow.updateAnimations()
-    end
-    HeadSwap.refreshOpenDialogues()
-    SettingsView.refreshStatusTexts()
+    if not animationRefitted then HeadSwap.refreshOpenDialogues() end -- (else refreshed with the animation)
 end
 
 -- The layer plugin windows go on; nil while the game screen isn't ready, which setNotice is told.
@@ -110,20 +104,22 @@ local function showVariantsOf(npcGroup, page)
         end
     end
     if showPlayerHeadOnly then
-        VariantsWindow.open(PrettyUI, pluginLayer, "My head", { VariantsWindow.PLAYER_HEAD_ID },
-            VariantsWindow.PLAYER_HEAD_ID, chooseFromVariants)
+        VariantsWindow.open(PrettyUI, pluginLayer, {
+            title = "My head", ids = { VariantsWindow.PLAYER_HEAD_ID }, current = VariantsWindow.PLAYER_HEAD_ID,
+            onPick = chooseFromVariants,
+        })
         return
     end
     VariantsWindow.remember(Settings.chosenNpcID, npcGroup)
-    VariantsWindow.open(PrettyUI, pluginLayer, npcGroup.name .. " variants", NpcDirectory.idsOf(npcGroup),
-        Settings.chosenNpcID, chooseFromVariants, NpcDirectory.nameOfNpc, {
-            page = page,
-            buttonText = nextGroupButtonText(npcGroup),
-            onButton = function()
-                showVariantsOf(NpcDirectory.nextGroupOfNpc(Settings.chosenNpcID, pickedGroup))
-                SettingsView.refreshNpcDropdown()
-            end,
-        })
+    VariantsWindow.open(PrettyUI, pluginLayer, {
+        title = npcGroup.name .. " variants", ids = NpcDirectory.idsOf(npcGroup), current = Settings.chosenNpcID,
+        onPick = chooseFromVariants, nameOf = NpcDirectory.nameOfNpc, page = page,
+        buttonText = nextGroupButtonText(npcGroup),
+        onButton = function()
+            showVariantsOf(NpcDirectory.nextGroupOfNpc(Settings.chosenNpcID, pickedGroup))
+            SettingsView.refreshNpcDropdown()
+        end,
+    })
 end
 
 openVariantsWindow = function()
@@ -133,10 +129,7 @@ openVariantsWindow = function()
 end
 
 -- The heads window closed: the animation and its dropdown go back to the head in use.
-AllHeadsWindow.onClosed = function()
-    refitAnimation()
-    SettingsView.refreshStatusTexts()
-end
+AllHeadsWindow.onClosed = function() refitAnimation() end
 
 openAllHeadsWindow = function()
     local pluginLayer = windowLayer(SettingsView.setNotice)
@@ -210,10 +203,9 @@ local function openSettingsWindow()
     end
     local pluginLayer = windowLayer(setPageNotice)
     if pluginLayer == nil then return end
-    -- The size it was left at, else the first one; kept on the screen.
     local placement = Settings.windows.settings
-    local width = math.min(math.max(placement.width or SETTINGS_WIDTH, SETTINGS_MIN_WIDTH), pluginLayer.width)
-    local height = math.min(math.max(placement.height or SETTINGS_HEIGHT, SETTINGS_MIN_HEIGHT), pluginLayer.height)
+    local width, height = WindowPlacement.size(pluginLayer, placement, SETTINGS_WIDTH, SETTINGS_HEIGHT,
+        SETTINGS_MIN_WIDTH, SETTINGS_MIN_HEIGHT)
     local x, y = WindowPlacement.position(pluginLayer, width, height, placement)
     local window = nil
     local opened = pcall(function()
