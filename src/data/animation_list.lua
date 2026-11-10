@@ -1,5 +1,5 @@
--- The animations the plugin lists. Old NPCs and the new-model player heads have different animations.
--- It is possible other groups of NPCs have different animations as well, but that is not currently implemented.
+-- The human animations the plugin lists: old NPC heads and the new-model player heads play different ones. Races and
+-- characters with animations of their own are in dedicated_animations.lua.
 return {
     npc = {
         { name = "HUMAN_UPDATE_CHATHEAD_ANGRY_EXTREME_LEN1", label = "ANGRY EXTREME" },

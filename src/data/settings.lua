@@ -12,16 +12,9 @@ Settings.chosenAnimationID = nil -- the animation picked from the animation drop
 Settings.humanAnimationID = nil
 Settings.DEFAULT_HEAD_VIEW_DISTANCE = 2150
 Settings.headViewDistance = Settings.DEFAULT_HEAD_VIEW_DISTANCE
-Settings.variantsWidth = nil  -- the size the variants window was left at
-Settings.variantsHeight = nil
-Settings.galleryWidth = nil   -- the size the all-heads window was left at
-Settings.galleryHeight = nil
-Settings.variantsX = nil      -- where the variants window was left (its top left corner)
-Settings.variantsY = nil
-Settings.galleryX = nil       -- where the all-heads window was left
-Settings.galleryY = nil
-Settings.settingsX = nil      -- where the settings window was left
-Settings.settingsY = nil
+Settings.HEAD_SIZE_PERCENT = { min = 50, max = 300, step = 5 } -- the head size slider
+-- Where each window was left: { x, y, width, height } (its top left corner; nil until it has been closed once).
+Settings.windows = { variants = {}, allHeads = {}, settings = {} }
 -- The settings are in their own window, else on the plugin's page. Not saved: the window closes when the plugin
 -- unloads, so the settings start on the page.
 Settings.settingsPoppedOut = false
@@ -36,10 +29,20 @@ local function savedInteger(settingKey)
     return savedValue ~= nil and savedValue >= 0 and savedValue or nil
 end
 
+-- The saved keys of each window's placement (the all-heads window's are still named "gallery").
+local WINDOW_KEY_PREFIXES = { variants = "variants", allHeads = "gallery", settings = "settings" }
+local PLACEMENT_KEY_SUFFIXES = { x = "X", y = "Y", width = "Width", height = "Height" }
+
 -- An NPC saved by its name in the game, or nil.
 local function savedNpc(settingKey)
     local npcName = PersistentDB:GetString(settingKey)
     return npcName ~= nil and npcName ~= "" and GameIds.resolve("NPC", npcName) or nil
+end
+
+-- An animation saved by its name in the game, or nil.
+local function savedSeq(settingKey)
+    local animationName = PersistentDB:GetString(settingKey)
+    return animationName ~= nil and animationName ~= "" and GameIds.resolve("Seq", animationName) or nil
 end
 
 -- An animation chosen: an empty string for the game's own animation, nothing saved yet for unsaved.
@@ -57,16 +60,15 @@ end
 
 function Settings.load()
     Settings.chosenNpcID = savedNpc("npcName")
-    Settings.lastSeenNpcAnimationID = savedInteger("animID")
+    Settings.lastSeenNpcAnimationID = savedSeq("lastSeenAnimName")
     Settings.chosenAnimationID = savedAnimation("animName", Animations.fallback)
     local chosenHuman = Animations.setOf(Settings.chosenAnimationID) == nil and Settings.chosenAnimationID or nil
     Settings.humanAnimationID = savedAnimation("humanAnimName", chosenHuman)
     Settings.headViewDistance = savedInteger("headViewDistance") or Settings.DEFAULT_HEAD_VIEW_DISTANCE
-    Settings.variantsWidth, Settings.variantsHeight = savedInteger("variantsWidth"), savedInteger("variantsHeight")
-    Settings.galleryWidth, Settings.galleryHeight = savedInteger("galleryWidth"), savedInteger("galleryHeight")
-    Settings.variantsX, Settings.variantsY = savedInteger("variantsX"), savedInteger("variantsY")
-    Settings.galleryX, Settings.galleryY = savedInteger("galleryX"), savedInteger("galleryY")
-    Settings.settingsX, Settings.settingsY = savedInteger("settingsX"), savedInteger("settingsY")
+    for window, prefix in pairs(WINDOW_KEY_PREFIXES) do
+        local placement = Settings.windows[window]
+        for field, suffix in pairs(PLACEMENT_KEY_SUFFIXES) do placement[field] = savedInteger(prefix .. suffix) end
+    end
     Settings.oneHeadPerGroup = savedInteger("oneHeadPerGroup") ~= 0
     Settings.variantsNpcID = savedNpc("variantsNpcName")
     Settings.variantsGroup = PersistentDB:GetString("variantsGroup")
@@ -84,36 +86,37 @@ end
 -- The settings are only kept in memory until the plugin shuts down.
 function Settings.save()
     PersistentDB:SetString("npcName", npcNameOf(Settings.chosenNpcID))
-    PersistentDB:SetInt("animID", Settings.lastSeenNpcAnimationID or -1)
+    PersistentDB:SetString("lastSeenAnimName", animationNameOf(Settings.lastSeenNpcAnimationID))
     PersistentDB:SetString("animName", animationNameOf(Settings.chosenAnimationID))
     PersistentDB:SetString("humanAnimName", animationNameOf(Settings.humanAnimationID))
     PersistentDB:SetInt("headViewDistance", Settings.headViewDistance)
-    PersistentDB:SetInt("variantsWidth", Settings.variantsWidth or -1)
-    PersistentDB:SetInt("variantsHeight", Settings.variantsHeight or -1)
-    PersistentDB:SetInt("galleryWidth", Settings.galleryWidth or -1)
-    PersistentDB:SetInt("galleryHeight", Settings.galleryHeight or -1)
-    PersistentDB:SetInt("variantsX", Settings.variantsX or -1)
-    PersistentDB:SetInt("variantsY", Settings.variantsY or -1)
-    PersistentDB:SetInt("galleryX", Settings.galleryX or -1)
-    PersistentDB:SetInt("galleryY", Settings.galleryY or -1)
-    PersistentDB:SetInt("settingsX", Settings.settingsX or -1)
-    PersistentDB:SetInt("settingsY", Settings.settingsY or -1)
+    for window, prefix in pairs(WINDOW_KEY_PREFIXES) do
+        local placement = Settings.windows[window]
+        for field, suffix in pairs(PLACEMENT_KEY_SUFFIXES) do
+            PersistentDB:SetInt(prefix .. suffix, placement[field] or -1)
+        end
+    end
     PersistentDB:SetInt("oneHeadPerGroup", Settings.oneHeadPerGroup and 1 or 0)
     PersistentDB:SetString("variantsNpcName", npcNameOf(Settings.variantsNpcID))
     PersistentDB:SetString("variantsGroup", Settings.variantsGroup or "")
     PersistentDB:SetInt("variantsPage", Settings.variantsPage or -1)
 end
 
--- The head size as the slider shows it: 50 to 300 percent of the normal size.
+-- The head size as the slider shows it: a percent of the normal size.
 function Settings.headSizePercent()
     return math.floor(Settings.DEFAULT_HEAD_VIEW_DISTANCE / Settings.headViewDistance * 100 + 0.5)
 end
 
-function Settings.setHeadSizePercent(percent)
+-- The head size from the slider's value, kept to its steps and bounds: the percent set.
+function Settings.setHeadSizePercent(sliderValue)
+    local limits = Settings.HEAD_SIZE_PERCENT
+    local percent = math.floor(sliderValue / limits.step + 0.5) * limits.step
+    percent = math.max(limits.min, math.min(limits.max, percent))
     Settings.headViewDistance = math.max(1, math.floor(Settings.DEFAULT_HEAD_VIEW_DISTANCE * 100 / percent + 0.5))
+    return percent
 end
 
--- How many times larger than normal the windows' heads are drawn.
+-- How many times larger than normal the heads are drawn (used by dev's debug windows).
 function Settings.headScaleMultiplier()
     return Settings.DEFAULT_HEAD_VIEW_DISTANCE / Settings.headViewDistance
 end

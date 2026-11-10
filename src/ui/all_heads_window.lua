@@ -3,11 +3,11 @@
 
 local Settings = require("src/data/settings")
 local NpcDirectory = require("src/game/npc_directory")
+local AnimationChoice = require("src/game/animation_choice")
 local HeadGrid = require("src/ui/head_grid")
 
 local AllHeadsWindow = {}
 
-AllHeadsWindow.animationForNpcHeads = nil -- function(npcID) -> the animation id this head should play, or nil
 AllHeadsWindow.onClosed = nil -- function(): called when the window has closed, however it was closed
 
 local grid = nil -- the HeadGrid while the window is open
@@ -31,15 +31,17 @@ local function matchingHeads(heads, text)
 end
 
 -- Opening it again brings it to the front.
--- heads: every head listed; headsOfEachGroup: one per group.
-function AllHeadsWindow.open(PrettyUI, parent, heads, headsOfEachGroup, current, onPick)
+function AllHeadsWindow.open(PrettyUI, parent, current, onPick)
     if grid then
         grid.window:Show()
-        return true
+        return
     end
     local searchText = ""
     searchedNames = nil
-    local function headsListed() return Settings.oneHeadPerGroup and headsOfEachGroup or heads end
+    -- Asked for when needed: every head's list is only made if "One per group" is unticked (and let go, unused).
+    local function headsListed()
+        return Settings.oneHeadPerGroup and NpcDirectory.headsOfEachGroup() or NpcDirectory.headsInNameOrder()
+    end
     local function nameShown(npcID)
         if searchedNames then return searchedNames[npcID] end
         return (Settings.oneHeadPerGroup and NpcDirectory.nameForGroupOfNpc or NpcDirectory.nameOfNpc)(npcID)
@@ -48,8 +50,7 @@ function AllHeadsWindow.open(PrettyUI, parent, heads, headsOfEachGroup, current,
         title = "All heads", columns = 5, rows = 4,
         minWidth = 770, -- (room for the buttons and boxes in the bottom row)
         ids = headsListed(), current = current,
-        savedWidth = Settings.galleryWidth, savedHeight = Settings.galleryHeight,
-        savedX = Settings.galleryX, savedY = Settings.galleryY,
+        placement = Settings.windows.allHeads,
         withSearch = true,
         toggle = {
             text = "One per group", selected = Settings.oneHeadPerGroup,
@@ -59,7 +60,8 @@ function AllHeadsWindow.open(PrettyUI, parent, heads, headsOfEachGroup, current,
             end,
         },
         nameOf = nameShown,
-        animationFor = function(npcID) return AllHeadsWindow.animationForNpcHeads(npcID) end,
+        -- (NPC heads: the NPC version of the animation chosen, whichever head is in use)
+        animationFor = function(npcID) return AnimationChoice.npcHeadAnimation(npcID) end,
         pageLabel = function(page, pages, shown)
             local counted = Settings.oneHeadPerGroup and "groups" or "heads"
             return ("Page %d of %d (%d %s%s)"):format(page, pages, shown, counted,
@@ -72,15 +74,11 @@ function AllHeadsWindow.open(PrettyUI, parent, heads, headsOfEachGroup, current,
             searchText = text
             grid:setHeads(matchingHeads(headsListed(), text), grid.current)
         end,
-        onPlacement = function(width, height, x, y)
-            Settings.galleryWidth, Settings.galleryHeight, Settings.galleryX, Settings.galleryY = width, height, x, y
-        end,
         onClosed = function()
             grid = nil
             AllHeadsWindow.onClosed()
         end,
     })
-    return grid ~= nil
 end
 
 return AllHeadsWindow

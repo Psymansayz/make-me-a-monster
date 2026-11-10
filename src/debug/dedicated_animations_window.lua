@@ -23,7 +23,8 @@ local headIDs = nil -- the grid's ids: each set's head shown, twice
 local shownSet, step, headIndex, ticks = nil, 1, 1, 0
 local headHeld = false -- a model was jumped to: the heads stop cycling
 local RESUME_TEXT = "Cycle models"
-local placement = {} -- the window's size and position, kept while the plugin runs
+-- The window's size and position (noted by HeadGrid at closing) and page, kept while the plugin runs.
+local placement = { width = 2 * CELL_W + 38, height = CELL_H + 96 }
 local blacklisted = {} -- npc id -> the blacklist's group holding it
 local BLANK = "blank"
 local NO_HUMAN = "(no human match)" -- the left head's label when the emotion has no human animation
@@ -157,8 +158,7 @@ function DedicatedAnimationsWindow.open(PrettyUI, parent)
         minWidth = 2 * 260, -- (room for Previous, Next, the model box, the button and the label)
         numberBox = { placeholder = "Model", onSubmit = jumpToModel },
         extraButton = { text = nil, onClick = resumeCycling },
-        savedWidth = placement.width or (2 * CELL_W + 38), savedHeight = placement.height or (CELL_H + 96),
-        savedX = placement.x, savedY = placement.y,
+        placement = placement,
         nameOf = function(_, position)
             local pair, isHuman = pairAt(position)
             return isHuman and pair[3] or pair[4]
@@ -173,9 +173,6 @@ function DedicatedAnimationsWindow.open(PrettyUI, parent)
         end,
         onPick = logHead,
         marksPick = false, -- (both cells hold the same head)
-        onPlacement = function(width, height, x, y)
-            placement.width, placement.height, placement.x, placement.y = width, height, x, y
-        end,
         onClosed = function()
             Event.ServerLogic.Unsubscribe(TICK_SUBSCRIPTION)
             placement.page = grid.page

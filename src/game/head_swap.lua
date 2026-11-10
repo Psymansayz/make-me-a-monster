@@ -2,15 +2,12 @@
 -- A box is handled once, when it opens, and again when the player changes the head,
 -- the animation or the size.
 
-local Animations = require("src/game/animations")
+local AnimationChoice = require("src/game/animation_choice")
 local Settings = require("src/data/settings")
 local GameIds = require("src/game/game_ids")
 local HeadSizes = require("src/game/head_sizes")
 
 local HeadSwap = {}
-
--- The NPC version of the animation the game last set on the player's head, before it was swapped (nil if it has none).
-local npcVersionOfGameAnimation = nil
 
 -- The dialogue boxes and the model components in them that hold a head:
 --   CHAT_V2_LEFT: the NPC's line, one head, always the NPC's own.
@@ -35,82 +32,13 @@ local PAIR_HEADS = headComponents("CHAT_V2_PAIR__CHATHEAD_LEFT", "CHAT_V2_PAIR__
 local PLAYER_HEAD_MODEL_TYPE = ui.ModelType.PLAYER_HEAD
 local NPC_HEAD_MODEL_TYPE = ui.ModelType.NPC_HEAD
 
-local npcVersionOfPlayerAnimation = {}
-for npcAnimation, playerAnimation in pairs(Animations.twin) do
-    npcVersionOfPlayerAnimation[playerAnimation] = npcAnimation
-end
--- A player animation several twins name is settled by alsoFor.
-for playerAnimation, npcAnimation in pairs(Animations.alsoFor) do
-    npcVersionOfPlayerAnimation[playerAnimation] = npcAnimation
-end
-
 -- Whether an interface is open now (checked first, so a closed box costs nothing more).
 local function isInterfaceOpen(interface)
     return interface ~= nil and ui.Interfaces:GetInterface(interface) ~= nil
 end
 
--- The choice as a head outside the sets plays it: a set's animation becomes its human match, else the last human
--- animation chosen (nil: the game's own).
-function HeadSwap.humanChoice()
-    local chosenAnimation = Settings.chosenAnimationID
-    local ownSet = Animations.setOf(chosenAnimation)
-    if ownSet == nil then return chosenAnimation end
-    return ownSet.toHuman[chosenAnimation] or Settings.humanAnimationID
-end
-
--- The animation the NPC head with this id should play (in a dialogue box or a window).
-function HeadSwap.npcHeadAnimation(npcID, playerAnimationOfLine)
-    local headSet = Animations.setOfHead(npcID)
-    if headSet ~= nil then
-        local wanted = Settings.chosenAnimationID or npcVersionOfGameAnimation or Settings.lastSeenNpcAnimationID
-        return HeadSwap.animationForHead(wanted or Animations.npcFallback, false, headSet)
-    end
-    local chosenAnimation = HeadSwap.humanChoice()
-    if Animations.isOnPlayerRig(npcID) then
-        if chosenAnimation ~= nil then return HeadSwap.animationForHead(chosenAnimation, true) end
-        if playerAnimationOfLine ~= nil and playerAnimationOfLine >= 0 then return playerAnimationOfLine end
-        return Animations.neutral
-    end
-    if chosenAnimation ~= nil then return HeadSwap.animationForHead(chosenAnimation, false) end
-    -- (the last seen can be a set's animation, from an NPC of a set)
-    local gameAnimation = npcVersionOfGameAnimation or Settings.lastSeenNpcAnimationID or Animations.npcFallback
-    return HeadSwap.animationForHead(gameAnimation, false)
-end
-
--- The animation the player's own head plays for the animation chosen.
-function HeadSwap.playerHeadAnimation(withNeutral)
-    local chosenAnimation = HeadSwap.humanChoice()
-    if chosenAnimation == nil then return withNeutral and Animations.neutral or nil end
-    -- (never an NPC animation: it is changed to the player's version)
-    return HeadSwap.animationForHead(chosenAnimation, true)
-end
-
--- The animation to keep when the head changes between the new player model heads, old NPC heads and the heads of a
--- set with animations of its own (headSet): the same emotion where the other kind has it, else a default.
-function HeadSwap.animationForHead(animationID, forPlayerHead, headSet)
-    if animationID == nil then return nil end
-    local ownSet = Animations.setOf(animationID)
-    -- Another set's animation goes by its human match, else the last human animation chosen.
-    local humanVersion = animationID
-    if ownSet ~= nil then humanVersion = ownSet.toHuman[animationID] or Settings.humanAnimationID end
-    if headSet ~= nil then
-        if ownSet == headSet then return animationID end
-        humanVersion = HeadSwap.animationForHead(humanVersion, false)
-        if headSet.alsoHuman and humanVersion ~= nil then return humanVersion end
-        return humanVersion and headSet.fromHuman[humanVersion] or headSet.default
-    end
-    animationID = humanVersion or Animations.npcFallback
-    local isPlayerAnimation = Animations.isPlayerAnimation(animationID)
-    if forPlayerHead then
-        if isPlayerAnimation then return animationID end
-        return Animations.twin[animationID] or Animations.fallback
-    end
-    if not isPlayerAnimation then return animationID end
-    return npcVersionOfPlayerAnimation[animationID] or npcVersionOfPlayerAnimation[Animations.fallback]
-end
-
 local function applyNpcHeadAnimation(component, npcID, playerAnimationOfLine)
-    local animationID = HeadSwap.npcHeadAnimation(npcID, playerAnimationOfLine)
+    local animationID = AnimationChoice.npcHeadAnimation(npcID, playerAnimationOfLine)
     if animationID ~= nil and component.animID ~= animationID then component.animID = animationID end
 end
 
@@ -125,6 +53,13 @@ end
 -- By head component: what the plugin wrote and what the game had set, to put the player's head back.
 local writtenAnimation, gameAnimation = {}, {}
 local swappedHeads = {} -- a player head turned into an NPC's: { npcID, gameAnimation, orthographic }
+
+-- The player's head back, with the animation and the projection the game had set.
+local function putPlayerHeadBack(component, swappedHead)
+    component:SetModel(PLAYER_HEAD_MODEL_TYPE, -1)
+    component.orthographic = swappedHead.orthographic
+    if swappedHead.gameAnimation ~= nil then component.animID = swappedHead.gameAnimation end
+end
 
 -- A head is drawn larger by moving the camera closer.
 local function writeHeadViewDistance(component, npcID)
@@ -145,11 +80,8 @@ local function swapComponentHead(component, npcID, componentKey)
     end
     if npcID == nil then
         if swappedHead ~= nil then
-            -- Back to the player's head, with the animation and the projection the game had set.
             swappedHeads[componentKey] = nil
-            component:SetModel(ui.ModelType.PLAYER_HEAD, -1)
-            component.orthographic = swappedHead.orthographic
-            if swappedHead.gameAnimation ~= nil then component.animID = swappedHead.gameAnimation end
+            putPlayerHeadBack(component, swappedHead)
             modelType = tonumber(component.modelType)
         end
         if modelType == PLAYER_HEAD_MODEL_TYPE then
@@ -158,7 +90,7 @@ local function swapComponentHead(component, npcID, componentKey)
             if lastWrittenAnimation == nil or currentAnimation ~= lastWrittenAnimation then
                 gameAnimation[componentKey] = currentAnimation -- (the game set it)
             end
-            local wantedAnimation = HeadSwap.playerHeadAnimation(false)
+            local wantedAnimation = AnimationChoice.playerHeadAnimation(false)
             if wantedAnimation ~= nil then
                 if currentAnimation ~= wantedAnimation then component.animID = wantedAnimation end
                 writtenAnimation[componentKey] = wantedAnimation
@@ -175,7 +107,7 @@ local function swapComponentHead(component, npcID, componentKey)
     end
     if swappedHead ~= nil then
         swappedHead.npcID = npcID
-        component:SetModel(ui.ModelType.NPC_HEAD, npcID)
+        component:SetModel(NPC_HEAD_MODEL_TYPE, npcID)
         applyNpcHeadAnimation(component, npcID, swappedHead.gameAnimation)
         writeHeadViewDistance(component, npcID)
         return
@@ -190,12 +122,12 @@ local function swapComponentHead(component, npcID, componentKey)
     if modelType ~= PLAYER_HEAD_MODEL_TYPE then return end -- an NPC's own head stays
     local gameAnimationOfLine = tonumber(component.animID)
     if gameAnimationOfLine ~= nil and gameAnimationOfLine >= 0 then
-        npcVersionOfGameAnimation = npcVersionOfPlayerAnimation[gameAnimationOfLine]
+        AnimationChoice.noteGameAnimation(gameAnimationOfLine)
     end
     swappedHeads[componentKey] = {
         npcID = npcID, gameAnimation = gameAnimationOfLine, orthographic = component.orthographic,
     }
-    component:SetModel(ui.ModelType.NPC_HEAD, npcID)
+    component:SetModel(NPC_HEAD_MODEL_TYPE, npcID)
     -- The player's head is orthographic and NPC heads are not, but SetModel keeps the projection.
     component.orthographic = false
     applyNpcHeadAnimation(component, npcID, gameAnimationOfLine)
@@ -207,9 +139,7 @@ local function restoreComponentHead(component, componentKey)
     local modelType = tonumber(component.modelType)
     local swappedHead = swappedHeads[componentKey]
     if swappedHead ~= nil and modelType == NPC_HEAD_MODEL_TYPE and component.modelID1 == swappedHead.npcID then
-        component:SetModel(ui.ModelType.PLAYER_HEAD, -1)
-        component.orthographic = swappedHead.orthographic
-        if swappedHead.gameAnimation ~= nil then component.animID = swappedHead.gameAnimation end
+        putPlayerHeadBack(component, swappedHead)
     elseif modelType ~= PLAYER_HEAD_MODEL_TYPE then
         return -- an NPC's own head
     elseif tonumber(component.animID) == writtenAnimation[componentKey] and gameAnimation[componentKey] ~= nil then
@@ -359,7 +289,7 @@ end
 function HeadSwap.reset()
     HeadSwap.stop()
     writtenAnimation, gameAnimation, swappedHeads = {}, {}, {}
-    npcVersionOfGameAnimation = nil
+    AnimationChoice.forgetGameAnimation()
 end
 
 return HeadSwap

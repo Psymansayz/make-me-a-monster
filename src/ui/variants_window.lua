@@ -2,12 +2,11 @@
 -- in several; with the player's own head in use, just that head.
 
 local Settings = require("src/data/settings")
+local AnimationChoice = require("src/game/animation_choice")
 local HeadGrid = require("src/ui/head_grid")
 
 local VariantsWindow = {}
 
-VariantsWindow.animationForNpcHeads = nil -- function(npcID) -> the animation id this NPC head should play, or nil
-VariantsWindow.animationForPlayerHead = nil -- function() -> the animation id the player's own head should play, or nil
 VariantsWindow.PLAYER_HEAD_ID = -1 -- the id standing for the player's own head (as the game's, for the local player)
 
 local grid = nil -- the HeadGrid while the window is open
@@ -19,7 +18,7 @@ local MIN_WIDTH = 640 -- (room for Previous, Next, the longest button text and t
 
 -- A group as saved: several can have one name, which of the head's groups it is then goes by its size too.
 local function savedGroupOf(npcGroup)
-    return npcGroup.name .. "|" .. #npcGroup.ids
+    return npcGroup.name .. "|" .. npcGroup.idCount
 end
 
 -- What the window opens on for this NPC: the group it was just selected under; else the group and page last open if it
@@ -58,8 +57,8 @@ local function isPlayerHead(npcID)
 end
 
 local function animationFor(npcID)
-    if isPlayerHead(npcID) then return VariantsWindow.animationForPlayerHead() end
-    return VariantsWindow.animationForNpcHeads(npcID)
+    if isPlayerHead(npcID) then return AnimationChoice.playerHeadAnimation(true) end
+    return AnimationChoice.npcHeadAnimation(npcID)
 end
 
 function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPick, labelFor, view)
@@ -71,30 +70,24 @@ function VariantsWindow.open(PrettyUI, parent, title, variantIDs, current, onPic
         grid.onPick, grid.nameOf = onPick, nameOf
         grid:setHeads(variantIDs, current, title, view.page)
         grid:setExtraButton(view.buttonText)
-        return true
+        return
     end
     grid = HeadGrid.open(PrettyUI, parent, {
         title = title, columns = 3, rows = 3, minWidth = MIN_WIDTH,
         ids = variantIDs, current = current, page = view.page,
         extraButton = { text = view.buttonText, onClick = function() if onButton then onButton() end end },
-        savedWidth = Settings.variantsWidth, savedHeight = Settings.variantsHeight,
-        savedX = Settings.variantsX, savedY = Settings.variantsY,
+        placement = Settings.windows.variants,
         nameOf = nameOf, isPlayerHead = isPlayerHead, animationFor = animationFor,
         pageLabel = function(page, pages, shown)
             return ("Page %d of %d (%d variants)"):format(page, pages, shown)
         end,
         onPick = onPick,
-        onPlacement = function(width, height, x, y)
-            Settings.variantsWidth, Settings.variantsHeight = width, height
-            Settings.variantsX, Settings.variantsY = x, y
-        end,
         onClosed = function()
             -- (with the player's own head in use, the page is not that of the NPC remembered)
             if Settings.chosenNpcID ~= nil then Settings.variantsPage = grid.page end
             grid = nil
         end,
     })
-    return grid ~= nil
 end
 
 return VariantsWindow

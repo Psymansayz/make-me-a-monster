@@ -4,20 +4,25 @@
 
 local GameIds = {}
 
-GameIds.unresolved = {} -- "<kind>.<name>" for every name the game did not know
+-- "<kind>.<name>" for every name the game did not know, for dev's reports; nil (set so by main's main.lua) notes none.
+GameIds.unresolved = {}
+
+local function noteUnresolved(text)
+    if GameIds.unresolved ~= nil then GameIds.unresolved[#GameIds.unresolved + 1] = text end
+end
 
 -- An unknown name reads as -1 in the game's table.
 function GameIds.resolve(kind, name)
     local configID = id[kind][name]
     if configID >= 0 then return configID end
-    GameIds.unresolved[#GameIds.unresolved + 1] = kind .. "." .. name
+    noteUnresolved(kind .. "." .. name)
     return nil
 end
 
 function GameIds.playerVariable(name)
     local variable = var.VarPlayer[name]
     if variable == nil then
-        GameIds.unresolved[#GameIds.unresolved + 1] = "VarPlayer." .. name
+        noteUnresolved("VarPlayer." .. name)
         return nil
     end
     return variable.id

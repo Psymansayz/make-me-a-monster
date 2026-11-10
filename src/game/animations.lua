@@ -7,7 +7,8 @@ local GameIds = require("src/game/game_ids")
 
 local Animations = {}
 
--- The sets name the same human animations hundreds of times: each name is looked up (and reported unknown) once.
+-- The sets name the same human animations hundreds of times: each name is looked up (and reported unknown) once,
+-- while loading.
 local idOfName = {}
 local function seqID(name)
     if name == nil then return nil end
@@ -38,8 +39,13 @@ local function idPairs(namePairs)
     end
     return idTable
 end
-Animations.twin = idPairs(AnimationList.twin)
-Animations.alsoFor = idPairs(AnimationList.alsoFor)
+-- An NPC head animation's player version, and the other way round (one several twins name is settled by alsoFor).
+local playerTwin = idPairs(AnimationList.twin)
+local npcTwin = {}
+for npcAnimation, playerAnimation in pairs(playerTwin) do npcTwin[playerAnimation] = npcAnimation end
+for playerAnimation, npcAnimation in pairs(idPairs(AnimationList.alsoFor)) do
+    npcTwin[playerAnimation] = npcAnimation
+end
 Animations.neutral = seqID(AnimationList.neutral)
 Animations.fallback = seqID(AnimationList.fallback)
 Animations.npcFallback = seqID(AnimationList.npcFallback)
@@ -118,10 +124,20 @@ function Animations.isOnPlayerRig(npcID)
     return Animations.headsOnPlayerRig[npcID] ~= nil
 end
 
--- { id, label } in the dropdown's order: for the player's own head, for NPC heads, or for the heads of a set.
+-- The listings in the dropdown's order: for the player's own head, for NPC heads, or for the heads of a set.
 function Animations.options(forPlayerHead, headSet)
     if headSet ~= nil then return headSet.options end
     return forPlayerHead and optionsFor.player or optionsFor.npc
+end
+
+-- The player's version of an NPC head animation, or nil.
+function Animations.playerTwinOf(npcAnimationID)
+    return playerTwin[npcAnimationID]
+end
+
+-- The NPC head version of a player animation, or nil.
+function Animations.npcTwinOf(playerAnimationID)
+    return npcTwin[playerAnimationID]
 end
 
 function Animations.nameOf(animationID)
@@ -129,8 +145,10 @@ function Animations.nameOf(animationID)
 end
 
 function Animations.idOf(name)
-    local animationID = seqID(name)
+    local animationID = GameIds.resolve("Seq", name)
     return Animations.isListed(animationID) and animationID or nil
 end
+
+idOfName = nil -- (the loading's cache, no longer needed)
 
 return Animations

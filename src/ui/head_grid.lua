@@ -1,27 +1,27 @@
--- A window of chat heads in a paged grid (the "all heads" and "variants" windows, and the debug windows). The cells are made once and reused
--- for every page. Heads aren't drawn in their own windows to avoid graphical errors.
+-- A window of chat heads in a paged grid (the "all heads" and "variants" windows). The cells are made once and reused
+-- for every page.
 --
 -- Models aren't clipped by a scroll area: so pages, not scrolling.
 -- Models drawn in two regions of the tree (a window's content or root, a dialogue box) make the game flicker along
--- their top and right edges: so they are drawn in a single layer, overlaid on the windows.
--- Components left to a parent's Destroy make the plugin lag when it unloads: so a closing window destroys every part
--- of every cell itself, the models first.
+-- their top and right edges: so they are drawn in two layers beside the window, overlaid on it. This relies on
+-- PrettyUI's internals (its overlays, drag bounds, resize controller and SetSize): check them after a PrettyUI update.
+-- A closing window takes its cells' backgrounds and its controls with it; release() destroys the two layers.
 --
 -- HeadGrid.open(PrettyUI, parent, options) -> the grid, or nil. options: title; columns, rows; ids; current;
---   minWidth; savedWidth/Height/X/Y; page (else the page of the head in use); withSearch;
---   toggle = { text, selected, onChange(selected) } (a check box, with withSearch);
+--   minWidth; placement (a Settings.windows entry: read at opening, noted at closing); page (else the page of the
+--   head in use); withSearch; toggle = { text, selected, onChange(selected) } (a check box, with withSearch);
 --   extraButton = { text, onClick() } (a button at the row's end, without withSearch; hidden without a text);
 --   numberBox = { placeholder, onSubmit(number) } (a number field after Next, without withSearch);
 --   marksPick = false (a head clicked is not marked as the one in use);
 --   nameOf(id, position); isPlayerHead(id); animationFor(id, position) (position: the head's place in ids, for a head
---   listed more than once); pageLabel(page, pages, shown); onPick(id); onSearch(text);
---   onPlacement(width, height, x, y); onClosed().
+--   listed more than once); pageLabel(page, pages, shown); onPick(id); onSearch(text); onClosed().
 -- grid:setHeads(ids, current, title, page); grid:setExtraButton(text); grid:updateAnimations();
 -- grid:refreshHeadSize(); grid:close(). HeadGrid.addWindowFunctions gives a window module its isOpen,
 -- updateAnimations, refreshHeadSize and close.
 
 local Settings = require("src/data/settings")
 local HeadSizes = require("src/game/head_sizes")
+local WindowPlacement = require("src/ui/window_placement")
 
 local HeadGrid = {}
 HeadGrid.__index = HeadGrid
@@ -35,14 +35,14 @@ local LABELS_HEIGHT = 40 -- the name and the id under a head: two 16-high lines,
 local START_CELL_W, START_CELL_H = 150, 170 -- a cell when a window opens without a saved size
 local MIN_CELL_W, MIN_CELL_H = 90, 110      -- and the least a window can be resized to
 local BORDERS, TITLE_AND_BOTTOM = 16, 40     -- PrettyUI's 8-wide borders both sides; its 32-high title bar and bottom
-local BASE_VIEW, BASE_SIZE = 2150, 160       -- the game's view distance for a chat head, at BASE_SIZE units across
+local BASE_SIZE = 160                        -- the size of a chat head drawn at the head size's view distance
 local WINDOW_HEAD_SCALE = 1.5                -- the heads in the windows, this much larger than in the dialogue boxes
 
 local BACKGROUND = Vector4.new(0.12, 0.09, 0.06, 1)
 local HOVER = Vector4.new(0.30, 0.24, 0.14, 1)
 local CURRENT = Vector4.new(0.55, 0.42, 0.14, 1)
 local TEXT_LIGHT = 0xE9E5DDFF
-local CELL_PARTS = { "model", "name", "idLabel", "background", "click" } -- (the order they are destroyed in)
+local CELL_PARTS = { "model", "name", "idLabel", "background", "click" } -- (hidden and shown together)
 local raiseCount = 0 -- (for a Draw subscription id of each grid's own)
 
 local function frameSize(columns, rows, cellW, cellH)
@@ -52,7 +52,7 @@ end
 
 local WIDTH_SHARE, HEIGHT_SHARE = 0.45, 0.75
 
-function HeadGrid.defaultSize(parent)
+local function defaultSize(parent)
     local width, height = frameSize(5, 4, START_CELL_W, START_CELL_H)
     local scale = math.min(parent.width * WIDTH_SHARE / width, parent.height * HEIGHT_SHARE / height)
     return math.floor(width * scale), math.floor(height * scale)
@@ -74,35 +74,50 @@ function HeadGrid:geometry()
     local cellW = math.max(40, math.floor((width - PAD * 2 - (self.columns - 1) * GAP) / self.columns))
     local cellH = math.max(60, math.floor((height - PAD * 2 - NAV_HEIGHT - 4 - (self.rows - 1) * GAP) / self.rows))
     local gridW = self.columns * cellW + (self.columns - 1) * GAP
-    return { width = width, cellW = cellW, cellH = cellH, originX = math.max(0, math.floor((width - gridW) / 2)),
-        originY = PAD, gridH = self.rows * cellH + (self.rows - 1) * GAP }
+    return { width = width, height = height, cellW = cellW, cellH = cellH,
+        originX = math.max(0, math.floor((width - gridW) / 2)), originY = PAD,
+        gridH = self.rows * cellH + (self.rows - 1) * GAP }
 end
 
-function HeadGrid:placeCell(cell, g)
+local function cellOrigin(self, cell, g)
     local column, row = (cell.index - 1) % self.columns, math.floor((cell.index - 1) / self.columns)
-    local x, y = g.originX + column * (g.cellW + GAP), g.originY + row * (g.cellH + GAP)
-    local headSize = math.max(16, math.min(g.cellW, g.cellH - LABELS_HEIGHT)) -- (square, over the labels)
+    return g.originX + column * (g.cellW + GAP), g.originY + row * (g.cellH + GAP)
+end
+
+-- What lies in the window's content, and the sizes: placed again only when the grid's size changes.
+function HeadGrid:placeCellFrame(cell, g)
+    local x, y = cellOrigin(self, cell, g)
     cell.background:SetPos(x, y)
     cell.background:SetSize(g.cellW, g.cellH)
-    cell.model:SetPos(g.offsetX + x + math.floor((g.cellW - headSize) / 2), g.offsetY + y)
-    -- A model set again is redrawn from nothing, and a resize places the cells at every step: so only when they change.
+    cell.click:SetPos(x, y)
+    cell.click:SetSize(g.cellW, g.cellH)
+    cell.name:SetSize(g.cellW, 16)
+    cell.idLabel:SetSize(g.cellW, 16)
+    -- A model set again is redrawn from nothing: so only when it changes.
+    local headSize = math.max(16, math.min(g.cellW, g.cellH - LABELS_HEIGHT)) -- (square, over the labels)
     if cell.headSize ~= headSize then
         cell.headSize = headSize
         cell.model:SetSize(headSize, headSize)
     end
-    -- A head is drawn larger by moving the camera closer.
-    local viewDistance = math.max(1, math.floor(BASE_VIEW * BASE_SIZE / headSize / WINDOW_HEAD_SCALE
-        / Settings.headScaleMultiplier() / HeadSizes.of(cell.id)))
+end
+
+-- What lies in the layers beside the window: placed again when the window moves too.
+function HeadGrid:placeCellOverlay(cell, g)
+    local x, y = cellOrigin(self, cell, g)
+    cell.model:SetPos(g.offsetX + x + math.floor((g.cellW - cell.headSize) / 2), g.offsetY + y)
+    cell.name:SetPos(g.offsetX + x, g.offsetY + y + g.cellH - 38)
+    cell.idLabel:SetPos(g.offsetX + x, g.offsetY + y + g.cellH - 20)
+end
+
+-- A head is drawn larger by moving the camera closer.
+function HeadGrid:placeViewDistance(cell)
+    if cell.id == nil or cell.headSize == nil then return end
+    local viewDistance = math.max(1, math.floor(Settings.headViewDistance * BASE_SIZE / cell.headSize
+        / WINDOW_HEAD_SCALE / HeadSizes.of(cell.id)))
     if cell.viewDistance ~= viewDistance then
         cell.viewDistance = viewDistance
         cell.model.viewDistance = viewDistance
     end
-    cell.name:SetPos(g.offsetX + x, g.offsetY + y + g.cellH - 38)
-    cell.name:SetSize(g.cellW, 16)
-    cell.idLabel:SetPos(g.offsetX + x, g.offsetY + y + g.cellH - 20)
-    cell.idLabel:SetSize(g.cellW, 16)
-    cell.click:SetPos(x, y)
-    cell.click:SetSize(g.cellW, g.cellH)
 end
 
 function HeadGrid:placeNavigation(g)
@@ -136,13 +151,23 @@ function HeadGrid:placeNavigation(g)
     end
 end
 
+-- Places what changed since last time: everything after a resize, the heads and labels after a move, else only the
+-- view distances (a page or a head size). self.placed = nil places everything.
 function HeadGrid:place()
     local g = self:geometry()
     -- The heads and labels are in layers on the plugin layer: placed from where the content is there.
     local root = self.window.root
     g.offsetX, g.offsetY = root.x + BORDERS / 2, root.y + TITLE_AND_BOTTOM - BORDERS / 2
-    for _, cell in ipairs(self.cells) do self:placeCell(cell, g) end
-    self:placeNavigation(g)
+    local placed = self.placed
+    local resized = placed == nil or placed.width ~= g.width or placed.height ~= g.height
+    local moved = resized or placed.offsetX ~= g.offsetX or placed.offsetY ~= g.offsetY
+    for _, cell in ipairs(self.cells) do
+        if resized then self:placeCellFrame(cell, g) end
+        if moved then self:placeCellOverlay(cell, g) end
+        self:placeViewDistance(cell)
+    end
+    if resized then self:placeNavigation(g) end
+    self.placed = { width = g.width, height = g.height, offsetX = g.offsetX, offsetY = g.offsetY }
 end
 
 -- Only with the window: raising these layers on anything else (a page, the head size) would put its heads over a window
@@ -154,11 +179,28 @@ function HeadGrid:layout()
 end
 
 local function setCellHidden(cell, hidden)
+    if cell.hidden == hidden then return end
+    cell.hidden = hidden
     for _, part in ipairs(CELL_PARTS) do cell[part].hidden = hidden end
 end
 
+local function setCellTexts(cell, nameText, idText)
+    if cell.nameText ~= nameText then
+        cell.nameText = nameText
+        cell.name.content = nameText
+    end
+    if cell.idText ~= idText then
+        cell.idText = idText
+        cell.idLabel.content = idText
+    end
+end
+
 function HeadGrid:paintCell(cell, hovered)
-    cell.background.colour = hovered and HOVER or (cell.id == self.current and CURRENT or BACKGROUND)
+    local colour = hovered and HOVER or (cell.id == self.current and CURRENT or BACKGROUND)
+    if cell.colour ~= colour then
+        cell.colour = colour
+        cell.background.colour = colour
+    end
 end
 
 function HeadGrid:pick(pickedCell)
@@ -206,23 +248,23 @@ function HeadGrid:fillCell(cell, npcID, position)
     if cell.id ~= npcID then
         cell.id = npcID
         cell.model:SetModel(modelTypeFor(self, npcID), npcID)
-        cell.viewDistance = nil -- (SetModel puts the view distance back to its default: placeCell sets it again)
-        local animationID = self.animationFor(npcID, position)
-        if animationID ~= nil then cell.model.animID = animationID end
+        cell.viewDistance = nil -- (SetModel puts the view distance back to its default: place sets it again)
+        cell.animationID = self.animationFor(npcID, position)
+        if cell.animationID ~= nil then cell.model.animID = cell.animationID end
     end
     local isPlayer = self.isPlayerHead(npcID)
     local name = not isPlayer and self.nameOf(npcID, position) or nil
-    cell.name.content = isPlayer and "My head" or name or ("ID " .. npcID)
-    cell.idLabel.content = name and ("ID " .. npcID) or ""
+    setCellTexts(cell, isPlayer and "My head" or name or ("ID " .. npcID), name and ("ID " .. npcID) or "")
     setCellHidden(cell, false)
     self:paintCell(cell, false)
 end
 
 -- The model is let go, not just hidden, so a page with few heads keeps few loaded.
 local function emptyCell(cell)
-    cell.id = nil
+    if cell.id == nil then return end
+    cell.id, cell.animationID = nil, nil
     cell.model:SetModel(ui.ModelType.NONE, -1)
-    cell.name.content, cell.idLabel.content = "", ""
+    setCellTexts(cell, "", "")
     setCellHidden(cell, true)
 end
 
@@ -261,6 +303,7 @@ function HeadGrid:setExtraButton(text)
         self.extraWidth = self.simpleButton.getSize(text)
         button.root:SetSize(self.extraWidth, button.root.height)
     end
+    self.placed = nil -- (the bottom row is placed again)
     if #self.cells > 0 then self:place() end -- (else the first page places it)
 end
 
@@ -276,35 +319,31 @@ function HeadGrid:updateAnimations()
     for _, cell in ipairs(self.cells) do
         if cell.id ~= nil then
             local animationID = self.animationFor(cell.id, cell.position)
-            if animationID ~= nil then
-                cell.model.animID = animationID
-            else
-                cell.model:SetModel(modelTypeFor(self, cell.id), cell.id) -- (no animation: the head as it starts)
-                cell.model.viewDistance = cell.viewDistance
+            if animationID ~= cell.animationID then
+                cell.animationID = animationID
+                if animationID ~= nil then
+                    cell.model.animID = animationID
+                else
+                    cell.model:SetModel(modelTypeFor(self, cell.id), cell.id) -- (no animation: the head as it starts)
+                    cell.model.viewDistance = cell.viewDistance
+                end
             end
         end
     end
 end
 
 function HeadGrid:refreshHeadSize()
-    self:place()
+    for _, cell in ipairs(self.cells) do self:placeViewDistance(cell) end
 end
 
 -- Runs however the window was closed.
 function HeadGrid:release()
     if self.closed then return end
     self.closed = true
-    local root = self.window.root
-    self.onPlacement(math.floor(root.width), math.floor(root.height),
-        math.max(0, math.floor(root.x)), math.max(0, math.floor(root.y)))
+    WindowPlacement.remember(self.window, self.placement)
     Event.Draw.Unsubscribe(self.raiseSubscription)
     self.window:_UnregisterOverlay(self.labelsLayer)
-    -- Every part destroyed one by one: see the top of this file.
-    for _, cell in ipairs(self.cells) do
-        for _, part in ipairs(CELL_PARTS) do cell[part]:Destroy() end
-    end
     self.cells = {}
-    for _, control in pairs(self.nav) do control:Destroy() end
     self.nav = {}
     self.headsLayer:Destroy()
     self.labelsLayer:Destroy()
@@ -326,23 +365,19 @@ function HeadGrid.open(PrettyUI, parent, options)
         pageLabel = options.pageLabel,
         onPick = options.onPick or function() end,
         onSearch = options.onSearch,
-        onPlacement = options.onPlacement or function() end,
         onClosed = options.onClosed or function() end,
+        placement = options.placement,
         marksPick = options.marksPick ~= false,
         cells = {}, nav = {}, closed = false, page = options.page, simpleButton = PrettyUI.SimpleButton,
     }, HeadGrid)
     -- As it was left, else the default; kept on the screen.
     local minWidth, minHeight = frameSize(self.columns, self.rows, MIN_CELL_W, MIN_CELL_H)
     minWidth = math.max(minWidth, options.minWidth or 0)
-    local width, height = options.savedWidth, options.savedHeight
-    if width == nil then width, height = HeadGrid.defaultSize(parent) end
+    local width, height = self.placement.width, self.placement.height
+    if width == nil or height == nil then width, height = defaultSize(parent) end
     width = math.max(math.min(minWidth, parent.width), math.min(width, parent.width))
     height = math.max(math.min(minHeight, parent.height), math.min(height, parent.height))
-    -- Where it was left, else the middle (kept on the screen).
-    local x, y = options.savedX, options.savedY
-    if x == nil then x, y = math.floor((parent.width - width) / 2), math.floor((parent.height - height) / 2) end
-    x = math.max(0, math.min(x, parent.width - width))
-    y = math.max(0, math.min(y, parent.height - height))
+    local x, y = WindowPlacement.position(parent, width, height, self.placement)
     self.contentWidth, self.contentHeight = contentSizeOf(width, height)
     local made = pcall(function()
         self.window = PrettyUI.Window.new(parent, {
@@ -365,12 +400,13 @@ function HeadGrid.open(PrettyUI, parent, options)
     -- Placed again when the window is shown, resized or dropped. The labels layer is the overlay: PrettyUI raises it
     -- after the layout raises the heads, so the labels end up on top.
     window:_RegisterOverlay(self.labelsLayer, nil, function() if not self.closed then self:layout() end end)
-    -- Placed again at each step of a title-bar drag: PrettyUI notes the position through the drag bounds.
+    -- Placed again at each step of a title-bar drag: PrettyUI notes the position through the drag bounds. (A resize
+    -- step notes it too, then lays the overlay out: placed once then, by the overlay.)
     local dragBounds = window.dragBounds
     local rememberPosition = dragBounds.RememberPosition
     dragBounds.RememberPosition = function(...)
         rememberPosition(...)
-        if not self.closed then self:layout() end
+        if not self.closed and not self.sizing then self:layout() end
     end
     -- A title-bar click raises the window over the layers, and its hook stops later listeners: so the layers are raised
     -- a frame after its handler disables the resize controller.
@@ -441,7 +477,9 @@ function HeadGrid.open(PrettyUI, parent, options)
             newHeight = math.max(window.minHeight, math.min(window.maxHeight or newHeight, math.floor(newHeight)))
             self.contentWidth, self.contentHeight = contentSizeOf(newWidth, newHeight)
         end
+        self.sizing = true
         setWindowSize(window, newWidth, newHeight)
+        self.sizing = false
     end
     return self
 end
