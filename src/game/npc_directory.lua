@@ -24,7 +24,7 @@ local function addPlainLetters(letters, ...)
     for character in letters:gmatch("[\194-\244][\128-\191]*") do PLAIN_LETTERS[character] = { ... } end
 end
 
--- The game does not use all of these letters at the moment, but they are included for completeness and future use.
+-- Not all of these are in the game's names yet.
 addPlainLetters("àáâãäåāăąǎÀÁÂÃÄÅĀĂĄǍ", "a")
 addPlainLetters("æÆ", "ae")
 addPlainLetters("çćĉċčÇĆĈĊČ", "c")
@@ -76,12 +76,27 @@ function NpcDirectory.lowerCaseAscii(inputText)
     return (inputText:gsub("[A-Z]", function(character) return character:lower() end))
 end
 
--- What searches look in: the text in lower case, followed by each way it reads made plain if it has letters beyond
--- ASCII.
-local function searchableText(inputText)
-    local lowered = NpcDirectory.lowerCaseAscii(inputText)
-    if not inputText:find("[\128-\255]") then return lowered end
-    return lowered .. " " .. NpcDirectory.lowerCaseAscii(table.concat(allPlainReadings(inputText), " "))
+-- A text cleaned as the list's names were when it was made: "50% Luke" is listed as "50 Luke", "Bob's" as "Bobs",
+-- "Tz-Kih" as "Tz Kih". (The names and the queries both: a few listed names still hold a symbol, as "Dagon'hai".)
+local function cleaned(text)
+    text = text:gsub("<[^>]*>", ""):gsub("\194\160", " "):gsub("[_%-]", " ")
+    return (text:gsub("[^%w%s\128-\255]", ""))
+end
+
+-- A text's words, cleaned and in lower case.
+local function cleanedWords(text)
+    local words = {}
+    for word in NpcDirectory.lowerCaseAscii(cleaned(text)):gmatch("%S+") do words[#words + 1] = word end
+    return words
+end
+
+-- What searches look in: the name cleaned and in lower case, followed by each way it reads made plain if it has
+-- letters beyond ASCII.
+local function searchableText(name)
+    local plain = cleaned(name)
+    local lowered = NpcDirectory.lowerCaseAscii(plain)
+    if not plain:find("[\128-\255]") then return lowered end
+    return lowered .. " " .. NpcDirectory.lowerCaseAscii(table.concat(allPlainReadings(plain), " "))
 end
 
 -- Selects a head to represent each group: one no other group shows, moving another group's to one of its others.
@@ -200,7 +215,7 @@ local function countDownCaches()
     if ticksToKeepCaches <= 0 then NpcDirectory.forgetCaches() end
 end
 
--- (also at shutdown)
+-- Lets the caches go: when they expire, and at shutdown.
 function NpcDirectory.forgetCaches()
     if countingDown then Event.ServerLogic.Unsubscribe(CACHE_SUBSCRIPTION) end
     searchTexts, headsInNameOrder, headsOfEachGroup = {}, nil, nil
@@ -277,21 +292,13 @@ local function headHolds(member, npcID, queryWords)
     return true
 end
 
--- A query cleaned as the names were when the list was made (dev's NpcDirectory.normalise): "50% Luke" is listed as
--- "50 Luke", "Bob's" as "Bobs", "Tz-Kih" as "Tz Kih".
-local function cleanedQuery(query)
-    query = query:gsub("<[^>]*>", ""):gsub("\194\160", " "):gsub("[_%-]", " ")
-    return (query:gsub("[^%w%s\128-\255]", ""))
-end
-
--- A query's words, cleaned and in lower case; .text: the words joined by single spaces. (Each search starts here: the
--- caches are kept five minutes more.)
+-- A query's words, cleaned and in lower case; .text: the words joined by single spaces; .blank: nothing was typed (a
+-- query of symbols only has no words, but is not blank: it matches nothing). Each search starts here: the caches are
+-- kept five minutes more.
 function NpcDirectory.wordsOfQuery(query)
-    local queryWords = {}
-    for queryWord in NpcDirectory.lowerCaseAscii(cleanedQuery(query)):gmatch("%S+") do
-        queryWords[#queryWords + 1] = queryWord
-    end
+    local queryWords = cleanedWords(query)
     queryWords.text = table.concat(queryWords, " ")
+    queryWords.blank = not query:find("%S")
     if #queryWords > 0 then keepCaches() end
     return queryWords
 end
@@ -363,7 +370,7 @@ end
 -- many NPCs match in all.
 function NpcDirectory.memberMatching(npcGroup, queryWords)
     if #queryWords == 0 then return nil end
-    if queryWords.text == NpcDirectory.lowerCaseAscii(npcGroup.name) then return nil end
+    if queryWords.text == table.concat(cleanedWords(npcGroup.name), " ") then return nil end
     -- A name holding every word wins over a match by id ("man 3": Man 3, not Man with an id holding 3).
     local bestByName, best, matchingNpcCount = nil, nil, 0
     for _, member in ipairs(npcGroup.members) do
@@ -453,7 +460,7 @@ end
 function NpcDirectory.searchGroups(queryWords, maxResults)
     local matchingGroups = {}
     for _, npcGroup in ipairs(NpcDirectory.groups) do
-        if #queryWords == 0 or groupHolds(npcGroup, queryWords) then
+        if queryWords.blank or (#queryWords > 0 and groupHolds(npcGroup, queryWords)) then
             matchingGroups[#matchingGroups + 1] = npcGroup
             if #matchingGroups >= maxResults then break end
         end
@@ -461,7 +468,7 @@ function NpcDirectory.searchGroups(queryWords, maxResults)
     return matchingGroups
 end
 
-
+-- The heads headsOfGroup gives for each group, once each, sorted by the names nameOf gives them (then by id).
 local function headsByName(headsOfGroup, nameOf)
     local heads, lowered = {}, {}
     for _, npcGroup in ipairs(NpcDirectory.groups) do
@@ -483,7 +490,13 @@ end
 function NpcDirectory.headsInNameOrder()
     keepCaches()
     if headsInNameOrder == nil then
-        headsInNameOrder = headsByName(NpcDirectory.idsOf, NpcDirectory.nameOfNpc)
+        headsInNameOrder = headsByName(function(npcGroup)
+            local ids = {}
+            for _, member in ipairs(npcGroup.members) do
+                for _, npcID in ipairs(member) do ids[#ids + 1] = npcID end
+            end
+            return ids
+        end, NpcDirectory.nameOfNpc)
     end
     return headsInNameOrder
 end

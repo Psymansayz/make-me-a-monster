@@ -27,8 +27,34 @@ local isRefreshingDropdown = false -- (SetEntries sends selection events too)
 -- Clicking it open puts it back. (Not on its change events: SetEntries sends those too.)
 local coverStates = {} -- dropdown -> { colours, covered, label, shownText }
 
+local function forgetControls()
+    controls, coverStates, npcEntries, animationEntries = nil, {}, nil, nil
+end
+
+-- The controls, or nil. Their page or window can unload silently (no close runs): then they are forgotten, as they
+-- went with it.
+local function liveControls()
+    if controls ~= nil and ui.Interfaces:GetInterface(controls.interfaceID) == nil then forgetControls() end
+    return controls
+end
+
 local function isCovered(dropdown)
     return coverStates[dropdown] ~= nil and coverStates[dropdown].covered
+end
+
+-- The label laid over a dropdown's own text: inset 8, clear of its arrow button (as wide as the box is high); its
+-- width follows the view's.
+local function makeCoverLabel(dropdownRoot, colours)
+    local label = ui.Text.new(dropdownRoot.parent)
+    label.clickthrough = true
+    label.maxLines = 1
+    label.alignHorizontal = ui.AlignMode.TOPLEFT
+    label.alignVertical = ui.AlignMode.CENTRE
+    label:SetPos(dropdownRoot.x + 8, dropdownRoot.y)
+    label:SetSize(dropdownRoot.width - 8 - dropdownRoot.height - dropdownRoot.parent.width, dropdownRoot.height, 1.0, 0)
+    label.font = dropdownRoot.entryText.font
+    label.rgba, label.isShadowed = colours[1], colours.isShadowed
+    return label
 end
 
 -- overlayText: what the covered box shows, or nil for a blank one.
@@ -58,26 +84,10 @@ local function coverDropdownText(dropdown, hideText, overlayText)
                 if coverState.label ~= nil then coverState.label.hidden = true end
                 return
             end
-            local overlayLabel = coverState.label
-            if overlayLabel == nil then
-                overlayLabel = ui.Text.new(dropdownRoot.parent)
-                overlayLabel.clickthrough = true
-                overlayLabel.maxLines = 1
-                overlayLabel.alignHorizontal = ui.AlignMode.TOPLEFT
-                overlayLabel.alignVertical = ui.AlignMode.CENTRE
-                coverState.label = overlayLabel
-            end
-            -- Where the box's own text goes: inset 8, clear of its arrow button (as wide as the box is high); its width
-            -- kept so as the view's width changes.
-            overlayLabel:SetPos(dropdownRoot.x + 8, dropdownRoot.y)
-            overlayLabel:SetSize(dropdownRoot.width - 8 - dropdownRoot.height - dropdownRoot.parent.width,
-                dropdownRoot.height, 1.0, 0)
-            overlayLabel.font = dropdownRoot.entryText.font
-            overlayLabel.rgba = coverState.colours[1]
-            overlayLabel.isShadowed = coverState.colours.isShadowed
-            overlayLabel.content = overlayText
-            overlayLabel.hidden = false
-            overlayLabel:MoveToFront()
+            coverState.label = coverState.label or makeCoverLabel(dropdownRoot, coverState.colours)
+            coverState.label.content = overlayText
+            coverState.label.hidden = false
+            coverState.label:MoveToFront()
         elseif coverState.covered then
             local savedColours = coverState.colours
             coverState.covered, coverState.shownText = false, nil
@@ -95,6 +105,14 @@ local function showTextWhenClicked(dropdown)
         coverDropdownText(dropdown, false)
         return false
     end)
+end
+
+-- Fills a dropdown and covers its closed box with closedText (nil: blank).
+local function fillDropdown(dropdown, entries, selected, closedText)
+    isRefreshingDropdown = true
+    pcall(function() dropdown:SetEntries(entries, selected) end)
+    isRefreshingDropdown = false
+    coverDropdownText(dropdown, true, closedText)
 end
 
 local function isSelectionEvent(eventType)
@@ -130,7 +148,7 @@ local function animationStatusText()
 end
 
 function SettingsView.refreshStatusTexts()
-    if controls == nil then return end
+    if liveControls() == nil then return end
     setText("chatheadStatusText", chatheadStatusMessage())
     setText("animationStatusText", animationStatusText())
 end
@@ -138,7 +156,7 @@ end
 -- Fills the animation dropdown for the head in use: a head of a set lists the set's animations. (Not again while it
 -- shows the same.)
 function SettingsView.refreshAnimationDropdown()
-    if controls == nil then return end
+    if liveControls() == nil then return end
     local npcHeads = npcAnimationsShown()
     local options = Animations.options(not npcHeads, AnimationChoice.setInUse())
     local shownAnimation = AnimationChoice.shown(npcHeads)
@@ -157,10 +175,7 @@ function SettingsView.refreshAnimationDropdown()
     animationEntries = { options = options, selected = selected }
     local entries = {}
     for entryID, listing in ipairs(options) do entries[entryID] = { label = listing.label, id = entryID } end
-    isRefreshingDropdown = true
-    pcall(function() dropdown:SetEntries(entries, selected) end)
-    isRefreshingDropdown = false
-    coverDropdownText(dropdown, true, selected and options[selected].label or nil)
+    fillDropdown(dropdown, entries, selected, selected and options[selected].label or nil)
 end
 
 -- A name equal to its group's stands for the whole group (Fairy holds Jukat too): so it counts the group's heads.
@@ -174,14 +189,14 @@ end
 -- Fills the NPC dropdown with the groups matching the search. With nothing typed the NPC chosen stays listed, so the
 -- dropdown can show it after a restart. (Not again while it shows the same.)
 function SettingsView.refreshNpcDropdown()
-    if controls == nil then return end
+    if liveControls() == nil then return end
     local query = controls.npcSearchBox:GetText()
     local queryWords = NpcDirectory.wordsOfQuery(query)
     local matchingGroups = NpcDirectory.searchGroups(queryWords, RESULTS_SHOWN)
     local matchCount = #matchingGroups
     local chosenGroup = actions.groupOfChosenNpc()
     local chosenMember = chosenGroup and NpcDirectory.memberOfNpc(Settings.chosenNpcID, chosenGroup)
-    if chosenGroup ~= nil and #queryWords == 0 then
+    if chosenGroup ~= nil and queryWords.blank then
         local alreadyListed = false
         for _, npcGroup in ipairs(matchingGroups) do
             if npcGroup == chosenGroup then
@@ -191,7 +206,7 @@ function SettingsView.refreshNpcDropdown()
         end
         if not alreadyListed then table.insert(matchingGroups, 1, chosenGroup) end
     end
-    local entries, labels, members, selected = {}, {}, {}, nil
+    local labels, members, selected = {}, {}, nil
     for entryID, npcGroup in ipairs(matchingGroups) do
         -- An entry shows the name that matched the search; the chosen NPC's group shows that NPC's name instead.
         local matchedMember, matchedNpcCount = NpcDirectory.memberMatching(npcGroup, queryWords)
@@ -200,7 +215,6 @@ function SettingsView.refreshNpcDropdown()
             if chosenMember ~= nil then matchedMember, matchedNpcCount = chosenMember, nil end
         end
         labels[entryID] = labelOfEntry(npcGroup, matchedMember, matchedNpcCount)
-        entries[entryID] = { label = labels[entryID], id = entryID }
         members[entryID] = matchedMember
     end
     local joinedLabels = table.concat(labels, "\n")
@@ -211,12 +225,10 @@ function SettingsView.refreshNpcDropdown()
         query = query, groups = matchingGroups, members = members, labels = joinedLabels, selected = selected,
     }
     if not unchanged then
-        isRefreshingDropdown = true
-        pcall(function() dropdown:SetEntries(entries, selected) end)
-        isRefreshingDropdown = false
-        local closedText = selected and labels[selected] or (Settings.chosenNpcID == nil and OWN_HEAD_TEXT)
-            or NPC_PLACEHOLDER
-        coverDropdownText(dropdown, true, closedText)
+        local entries = {}
+        for entryID, label in ipairs(labels) do entries[entryID] = { label = label, id = entryID } end
+        fillDropdown(dropdown, entries, selected, selected and labels[selected]
+            or (Settings.chosenNpcID == nil and OWN_HEAD_TEXT) or NPC_PLACEHOLDER)
     end
     setText("matchCountText", matchCount == RESULTS_SHOWN and ("Showing the first " .. RESULTS_SHOWN .. " matches.")
         or (matchCount .. " matches."))
@@ -226,7 +238,7 @@ end
 -- caller fills the animation dropdown, once the animation is fitted to the head in use.
 function SettingsView.build(view, window, givenActions)
     actions = givenActions
-    local built = { window = window }
+    local built = { window = window, interfaceID = view.interfaceID }
     view:AddText("Pick an NPC: its head replaces yours in dialogue boxes.")
     built.chatheadStatusText = view:AddText(chatheadStatusMessage())
     built.npcSearchBox = view:AddTextField({
@@ -263,8 +275,11 @@ function SettingsView.build(view, window, givenActions)
     local limits = Settings.HEAD_SIZE_PERCENT
     view:AddSlider({
         min = limits.min, max = limits.max, step = limits.step, value = Settings.headSizePercent(),
+        -- (a drag sends many values that round to the same size: only a new size is shown)
         onChange = function(_, sliderValue)
+            local before = Settings.headSizePercent()
             local percent = Settings.setHeadSizePercent(sliderValue)
+            if percent == before then return end
             actions.headSizeChanged()
             built.headSizeText.content = "Head size: " .. percent .. "%"
         end,
@@ -293,27 +308,27 @@ end
 
 -- Forgets the controls, which go with their view; a window's place is noted for next time.
 function SettingsView.release()
-    if controls == nil then return end
+    if liveControls() == nil then return end
     if controls.window ~= nil then WindowPlacement.remember(controls.window, Settings.windows.settings) end
-    controls, coverStates, npcEntries, animationEntries = nil, {}, nil, nil
+    forgetControls()
 end
 
 function SettingsView.isBuilt()
-    return controls ~= nil
+    return liveControls() ~= nil
 end
 
 -- The window holding the controls, or nil (on the page, or not built).
 function SettingsView.window()
-    return controls and controls.window
+    return liveControls() and controls.window
 end
 
 function SettingsView.setNotice(text)
-    if controls ~= nil then setText("noticeText", text) end
+    if liveControls() ~= nil then setText("noticeText", text) end
 end
 
 -- Empties the search box, without a search: the caller refreshes the dropdown.
 function SettingsView.clearSearch()
-    if controls ~= nil then controls.npcSearchBox:SetText("") end
+    if liveControls() ~= nil then controls.npcSearchBox:SetText("") end
 end
 
 return SettingsView

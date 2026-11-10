@@ -17,7 +17,7 @@
 --   listed more than once); pageLabel(page, pages, shown); onPick(id); onSearch(text); onClosed().
 -- grid:setHeads(ids, current, title, page); grid:setExtraButton(text); grid:updateAnimations();
 -- grid:refreshHeadSize(); grid:close(). HeadGrid.addWindowFunctions gives a window module its isOpen,
--- updateAnimations, refreshHeadSize and close.
+-- updateAnimations, refreshHeadSize and close, for a grid whose window is still loaded.
 
 local Settings = require("src/data/settings")
 local HeadSizes = require("src/game/head_sizes")
@@ -278,10 +278,21 @@ function HeadGrid:showPage()
         local npcID = self.ids[first + cell.index]
         if npcID == nil then emptyCell(cell) else self:fillCell(cell, npcID, first + cell.index) end
     end
-    self.nav.label.content = self.pageLabel(self.page, self.pages, #self.ids)
+    local label = self.pageLabel(self.page, self.pages, #self.ids)
+    if label ~= self.labelText then
+        self.labelText = label
+        self.nav.label.content = label
+    end
     self:place()
-    self.nav.previous.root.hidden = self.page <= 1
-    self.nav.after.root.hidden = self.page >= self.pages
+    local firstPage, lastPage = self.page <= 1, self.page >= self.pages
+    if firstPage ~= self.onFirstPage then
+        self.onFirstPage = firstPage
+        self.nav.previous.root.hidden = firstPage
+    end
+    if lastPage ~= self.onLastPage then
+        self.onLastPage = lastPage
+        self.nav.after.root.hidden = lastPage
+    end
 end
 
 -- Shows other heads, on this page, else on the page of the one in use.
@@ -296,7 +307,8 @@ end
 -- No text, no button.
 function HeadGrid:setExtraButton(text)
     local button = self.nav.extra
-    if button == nil then return end
+    if button == nil or (text == self.extraText and self.placed ~= nil) then return end
+    self.extraText = text
     button.root.hidden = text == nil
     if text ~= nil then
         button.content.content = text
@@ -356,6 +368,17 @@ function HeadGrid:close()
     self.window:Destroy()
 end
 
+-- Whether the window is still there. Its interface can unload silently (no close runs, and its components are gone):
+-- then the grid is forgotten, as if closed.
+function HeadGrid:stillLoaded()
+    if self.closed then return false end
+    if ui.Interfaces:GetInterface(self.window.interfaceID) ~= nil then return true end
+    self.closed = true
+    Event.Draw.Unsubscribe(self.raiseSubscription)
+    self.onClosed()
+    return false
+end
+
 function HeadGrid.open(PrettyUI, parent, options)
     local self = setmetatable({
         columns = options.columns, rows = options.rows, pageSize = options.columns * options.rows,
@@ -373,10 +396,8 @@ function HeadGrid.open(PrettyUI, parent, options)
     -- As it was left, else the default; kept on the screen.
     local minWidth, minHeight = frameSize(self.columns, self.rows, MIN_CELL_W, MIN_CELL_H)
     minWidth = math.max(minWidth, options.minWidth or 0)
-    local width, height = self.placement.width, self.placement.height
-    if width == nil or height == nil then width, height = defaultSize(parent) end
-    width = math.max(math.min(minWidth, parent.width), math.min(width, parent.width))
-    height = math.max(math.min(minHeight, parent.height), math.min(height, parent.height))
+    local defaultWidth, defaultHeight = defaultSize(parent)
+    local width, height = WindowPlacement.size(parent, self.placement, defaultWidth, defaultHeight, minWidth, minHeight)
     local x, y = WindowPlacement.position(parent, width, height, self.placement)
     self.contentWidth, self.contentHeight = contentSizeOf(width, height)
     local made = pcall(function()
@@ -425,7 +446,7 @@ function HeadGrid.open(PrettyUI, parent, options)
             end
         end)
     end
-    -- The game reads "<" in a button's text as the start of a markup tag.
+    -- "Previous" and "Next", not arrows: the game reads "<" in a button's text as the start of a markup tag.
     local nav = self.nav
     local buttonOptions = { width = NAV_BUTTON }
     nav.previous = PrettyUI.SimpleButton.new(content, "Previous", function() self:changePage(-1) end, buttonOptions)
@@ -486,10 +507,14 @@ end
 
 -- A window module's functions for its grid, while one is open: currentGrid() gives it, or nil.
 function HeadGrid.addWindowFunctions(windowModule, currentGrid)
-    function windowModule.isOpen() return currentGrid() ~= nil end
-    function windowModule.updateAnimations() if currentGrid() then currentGrid():updateAnimations() end end
-    function windowModule.refreshHeadSize() if currentGrid() then currentGrid():refreshHeadSize() end end
-    function windowModule.close() if currentGrid() then currentGrid():close() end end
+    local function liveGrid()
+        local grid = currentGrid()
+        return grid ~= nil and grid:stillLoaded() and grid or nil
+    end
+    function windowModule.isOpen() return liveGrid() ~= nil end
+    function windowModule.updateAnimations() if liveGrid() then liveGrid():updateAnimations() end end
+    function windowModule.refreshHeadSize() if liveGrid() then liveGrid():refreshHeadSize() end end
+    function windowModule.close() if liveGrid() then liveGrid():close() end end
 end
 
 return HeadGrid

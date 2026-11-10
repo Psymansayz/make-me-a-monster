@@ -1,6 +1,9 @@
 -- Make Me A Monster: choose an NPC in the settings, and its head replaces yours in the game's dialogue boxes.
 -- This file holds the plugin's page, the settings window, and what choosing a head sets going.
 
+-- Development: the names in the plugin's data that this game build does not know, noted from the first lookup on.
+require("src/game/game_ids").unresolved = {}
+
 local Settings = require("src/data/settings")
 local NpcDirectory = require("src/game/npc_directory")
 local AnimationChoice = require("src/game/animation_choice")
@@ -44,11 +47,13 @@ local function animationChanged()
     SettingsView.refreshStatusTexts()
 end
 
--- The animation chosen fitted to the head in use, and the animation dropdown to both.
+-- The animation chosen fitted to the head in use, and the animation dropdown and status texts to both; whether the
+-- animation changed (then everything following it was refreshed too).
 local function refitAnimation()
     local changed = AnimationChoice.fitToHead(AllHeadsWindow.isOpen())
     SettingsView.refreshAnimationDropdown()
-    if changed then animationChanged() end
+    if changed then animationChanged() else SettingsView.refreshStatusTexts() end
+    return changed
 end
 
 -- A head can be in several groups: the one the head chosen was picked from, kept for this session.
@@ -72,16 +77,10 @@ local function chooseNpc(npcID, chosenFrom, selectedGroup)
     Settings.chosenNpcID = npcID
     if chosenFrom == nil then pickedGroup = selectedGroup end
     if selectedGroup ~= nil then VariantsWindow.selectGroup(npcID, selectedGroup) end
-    local animationRefitted = AnimationChoice.fitToHead(AllHeadsWindow.isOpen())
-    SettingsView.refreshAnimationDropdown()
+    local animationRefitted = refitAnimation()
     if chosenFrom ~= "dropdown" then SettingsView.refreshNpcDropdown() end
     if chosenFrom ~= "variants" and VariantsWindow.isOpen() then openVariantsWindow() end
-    if animationRefitted then
-        AllHeadsWindow.updateAnimations()
-        VariantsWindow.updateAnimations()
-    end
-    HeadSwap.refreshOpenDialogues()
-    SettingsView.refreshStatusTexts()
+    if not animationRefitted then HeadSwap.refreshOpenDialogues() end -- (else refreshed with the animation)
 end
 
 -- The layer plugin windows go on; nil while the game screen isn't ready, which setNotice is told.
@@ -115,20 +114,22 @@ local function showVariantsOf(npcGroup, page)
         end
     end
     if showPlayerHeadOnly then
-        VariantsWindow.open(PrettyUI, pluginLayer, "My head", { VariantsWindow.PLAYER_HEAD_ID },
-            VariantsWindow.PLAYER_HEAD_ID, chooseFromVariants)
+        VariantsWindow.open(PrettyUI, pluginLayer, {
+            title = "My head", ids = { VariantsWindow.PLAYER_HEAD_ID }, current = VariantsWindow.PLAYER_HEAD_ID,
+            onPick = chooseFromVariants,
+        })
         return
     end
     VariantsWindow.remember(Settings.chosenNpcID, npcGroup)
-    VariantsWindow.open(PrettyUI, pluginLayer, npcGroup.name .. " variants", NpcDirectory.idsOf(npcGroup),
-        Settings.chosenNpcID, chooseFromVariants, NpcDirectory.nameOfNpc, {
-            page = page,
-            buttonText = nextGroupButtonText(npcGroup),
-            onButton = function()
-                showVariantsOf(NpcDirectory.nextGroupOfNpc(Settings.chosenNpcID, pickedGroup))
-                SettingsView.refreshNpcDropdown()
-            end,
-        })
+    VariantsWindow.open(PrettyUI, pluginLayer, {
+        title = npcGroup.name .. " variants", ids = NpcDirectory.idsOf(npcGroup), current = Settings.chosenNpcID,
+        onPick = chooseFromVariants, nameOf = NpcDirectory.nameOfNpc, page = page,
+        buttonText = nextGroupButtonText(npcGroup),
+        onButton = function()
+            showVariantsOf(NpcDirectory.nextGroupOfNpc(Settings.chosenNpcID, pickedGroup))
+            SettingsView.refreshNpcDropdown()
+        end,
+    })
 end
 
 openVariantsWindow = function()
@@ -138,10 +139,7 @@ openVariantsWindow = function()
 end
 
 -- The heads window closed: the animation and its dropdown go back to the head in use.
-AllHeadsWindow.onClosed = function()
-    refitAnimation()
-    SettingsView.refreshStatusTexts()
-end
+AllHeadsWindow.onClosed = function() refitAnimation() end
 
 openAllHeadsWindow = function()
     if not NpcDirectory.isLoaded then return SettingsView.setNotice("The NPCs are still being read.") end
@@ -170,6 +168,11 @@ end
 local function configNameOf(npcID)
     local named, configName = pcall(function() return config.NPC.FromID(npcID).configName end)
     return named and configName or "?"
+end
+
+-- How many times larger than normal the heads are drawn: the flagging window's scale.
+local function headScale()
+    return Settings.DEFAULT_HEAD_VIEW_DISTANCE / Settings.headViewDistance
 end
 
 -- What the debug windows' heads play: the player's version of the animation chosen, worked out at every fill.
@@ -258,7 +261,7 @@ local function showAnimationBrowser()
         variantIDs[#variantIDs + 1] = anim.id
         names[anim.id] = anim.name
     end
-    HeadFlaggingWindow.scaleFor = Settings.headScaleMultiplier
+    HeadFlaggingWindow.scaleFor = headScale
     HeadFlaggingWindow.open(PrettyUI, pluginLayer, variantIDs, function(animID) return names[animID] end, nil, {
         title = "Debug: all animations on Hans (green: whitelisted, blue: duplicate; click to select)",
         logLabel = "animation selected",
@@ -323,7 +326,7 @@ local function openHeadFlaggingWindow()
     local heads = {}
     for _, npcID in ipairs(NpcDirectory.headsInNameOrder()) do heads[#heads + 1] = npcID end
     table.sort(heads)
-    HeadFlaggingWindow.scaleFor = Settings.headScaleMultiplier
+    HeadFlaggingWindow.scaleFor = headScale
     HeadFlaggingWindow.open(PrettyUI, pluginLayer, heads, NpcDirectory.nameOfNpc,
         function(npcID) return AnimationChoice.npcHeadAnimation(npcID) end)
 end
@@ -377,7 +380,7 @@ local function openBlacklistedHeadsWindow()
             end
         end
     end
-    HeadFlaggingWindow.scaleFor = Settings.headScaleMultiplier
+    HeadFlaggingWindow.scaleFor = headScale
     HeadFlaggingWindow.open(PrettyUI, pluginLayer, heads, nameOf, nil, {
         title = "Debug: blacklisted heads and heads on the player's rig (green), with the player's animations",
         logLabel = "player rig",
@@ -415,7 +418,7 @@ local function openNewestHeadsWindow()
         if newestModel[a] ~= newestModel[b] then return newestModel[a] > newestModel[b] end
         return a < b
     end)
-    HeadFlaggingWindow.scaleFor = Settings.headScaleMultiplier
+    HeadFlaggingWindow.scaleFor = headScale
     local function nameWithModel(npcID)
         return (NpcDirectory.nameOfNpc(npcID) or "?") .. " (model " .. newestModel[npcID] .. ")"
     end
@@ -452,7 +455,7 @@ end
 local function openHeadGroupingWindow()
     local pluginLayer = headsWindowLayer()
     if pluginLayer == nil then return end
-    HeadFlaggingWindow.scaleFor = Settings.headScaleMultiplier
+    HeadFlaggingWindow.scaleFor = headScale
     HeadGroupingWindow.open(PrettyUI, pluginLayer, NpcDirectory.headsInNameOrder(), NpcDirectory.nameOfNpc,
         function(npcID) return AnimationChoice.npcHeadAnimation(npcID) end)
 end
@@ -636,10 +639,9 @@ local function openSettingsWindow()
     end
     local pluginLayer = windowLayer(setPageNotice)
     if pluginLayer == nil then return end
-    -- The size it was left at, else the first one; kept on the screen.
     local placement = Settings.windows.settings
-    local width = math.min(math.max(placement.width or SETTINGS_WIDTH, SETTINGS_MIN_WIDTH), pluginLayer.width)
-    local height = math.min(math.max(placement.height or SETTINGS_HEIGHT, SETTINGS_MIN_HEIGHT), pluginLayer.height)
+    local width, height = WindowPlacement.size(pluginLayer, placement, SETTINGS_WIDTH, SETTINGS_HEIGHT,
+        SETTINGS_MIN_WIDTH, SETTINGS_MIN_HEIGHT)
     local x, y = WindowPlacement.position(pluginLayer, width, height, placement)
     local window = nil
     local opened = pcall(function()

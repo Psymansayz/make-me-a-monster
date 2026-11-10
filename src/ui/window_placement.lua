@@ -1,6 +1,15 @@
--- Where a window opens: where it was left (its placement in Settings.windows), else in the middle; kept on the screen.
+-- Where a window opens and how big: as it was left (its placement in Settings.windows), else a default size in the
+-- middle; kept on the screen.
 
 local WindowPlacement = {}
+
+-- The size it was left at, else the default; at least the least size, unless the screen is smaller.
+function WindowPlacement.size(parent, placement, defaultWidth, defaultHeight, minWidth, minHeight)
+    local width, height = placement.width or defaultWidth, placement.height or defaultHeight
+    width = math.max(math.min(minWidth, parent.width), math.min(width, parent.width))
+    height = math.max(math.min(minHeight, parent.height), math.min(height, parent.height))
+    return width, height
+end
 
 -- The top left corner on parent for a window of this size.
 function WindowPlacement.position(parent, width, height, placement)

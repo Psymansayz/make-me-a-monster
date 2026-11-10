@@ -1,7 +1,8 @@
 -- Chat-head animations of a race or character's own, which its heads play in place of the human ones (alsoHuman: as
--- well as them). Each set: heads (constants of listed heads); animations { name, label, the human animation for the same emotion };
--- fromHuman { human animation, the set's version }, else default; sameAs { another length, the listed animation }.
--- A head in several sets plays the first. Generated from the game's animation names; checked in game by hand.
+-- well as them). Each set: name; heads (the names in the game, id.NPC, of listed heads); animations { name, label,
+-- the human animation for the same emotion }; fromHuman { human animation, the set's version }, else default;
+-- sameAs { another length, the listed animation }. A head in several sets plays the first. Made by
+-- tools/make_dedicated.py.
 return {
     {
         name = "Troll",
