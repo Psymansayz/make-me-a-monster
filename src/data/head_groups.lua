@@ -1,11 +1,11 @@
--- DEVELOPMENT ONLY (dev branch): the groups and duplicates made by hand in the grouping window
--- (src/debug/head_grouping_window.lua, tools/apply_grouping_log.py), with names, races and jobs, and same
--- models last. tools/make_listed_groups.py makes the plugin's list from this. The window shows only the
--- first head of each group and goes on from the numbers here. The duplicates are in the blacklist too.
+-- DEVELOPMENT ONLY (dev branch): the groups and duplicates made by hand in src/debug/head_grouping_window.lua
+-- and saved by tools/apply_grouping_log.py. They cover names, races and jobs, with same-model groups last.
+-- tools/make_listed_groups.py makes the plugin's list from this. The window shows only the first head of each
+-- group, and its log numbers continue from the counts here. The duplicates are also in the blacklist.
 return {
     groupsLogged = 90,
     batchesLogged = 885,
-    -- { { name = what the plugin calls it, { id, name, constant }... }... }: the head shown, then id order.
+    -- { { name = what the plugin calls it, { id, name, constant }... }... }, the head shown first, then by id.
     -- A head can be in several groups.
     groups = {
         {
@@ -322,7 +322,6 @@ return {
             { 4232, "Head", "POH_MOUNTED_KBD_MIDDLE" },
             { 5958, "Mr Mordaut", "EVENT16_HOST" },
             { 6117, "Mr Mordaut", "PATTERN_TEACHER" },
-            { 6743, "Dragon snowman", "XMAS07_SNOWMAN_DRAGON" },
             { 14969, "Frosty", "RAND_REWARD_BABY_FROST_DRAGON" },
             { 15454, "Queen Black Dragon", "QBD2_BOSS" },
             { 19107, "Therragorn", "OOAK_WHITEDRAGON_SCARED" },

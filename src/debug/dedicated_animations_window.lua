@@ -1,7 +1,6 @@
--- Debug only: a page per set of animations of its own (src/data/dedicated_animations.lua), showing one of its heads
--- twice: the human animation for an emotion on the left, the set's on the right. Every few seconds the next
--- animation plays on the next head. A model number entered holds that head until "Cycle models". Clicking a head
--- logs it (DEDICATED|head|), to find the heads of a working set that don't play it.
+-- Debug only: a page for each set in src/data/dedicated_animations.lua. It shows one of the set's heads twice, with the
+-- human animation for an emotion on the left and the set's own on the right. Every few seconds the next animation
+-- plays on the next head. Clicking a head logs it (DEDICATED|head|), to find the heads that don't play the set.
 
 local HeadGrid = require("src/ui/head_grid")
 local Blacklist = require("src/data/head_blacklist")
@@ -9,23 +8,23 @@ local DedicatedAnimations = require("src/data/dedicated_animations")
 
 local DedicatedAnimationsWindow = {}
 
-local grid = nil -- the HeadGrid while the window is open
+local grid = nil
 HeadGrid.addWindowFunctions(DedicatedAnimationsWindow, function() return grid end)
 
--- The client has no clock: so the animations change on server ticks (0.6 s each), 3 of them about every 2 seconds.
+-- The client has no clock, so the animations change on server ticks. Each is 0.6 s, so 3 ticks is about 2 seconds.
 local TICKS_PER_ANIMATION = 3
 local TICK_SUBSCRIPTION = "make_me_a_monster_dedicated_tick"
-local CELL_W, CELL_H = 300, 330 -- (room for the longest animation name under a head)
+local CELL_W, CELL_H = 300, 330 -- room for the longest animation name under a head
 
--- { name, page, heads = { npc id... }, pairs = { { humanID, ownID, humanName, ownName }... } }, once read
+-- { name, page, heads = { npc id... }, pairs = { { humanID, ownID, humanName, ownName }... } }
 local sets = nil
-local headIDs = nil -- the grid's ids: each set's head shown, twice
+local headIDs = nil -- the grid's ids: each set's shown head, twice
 local shownSet, step, headIndex, ticks = nil, 1, 1, 0
-local headHeld = false -- a model was jumped to: the heads stop cycling
+local headHeld = false -- true once a model number is entered, which stops the heads cycling
 local RESUME_TEXT = "Cycle models"
--- The window's size and position (noted by HeadGrid at closing) and page, kept while the plugin runs.
+-- The window's size, position and page, kept while the plugin runs.
 local placement = { width = 2 * CELL_W + 38, height = CELL_H + 96 }
-local blacklisted = {} -- npc id -> the blacklist's group holding it
+local blacklisted = {} -- npc id -> the blacklist group it is in
 local BLANK = "blank"
 local NO_HUMAN = "(no human match)" -- the left head's label when the emotion has no human animation
 
@@ -35,8 +34,8 @@ local function readBlacklist()
     end
 end
 
--- Each set's heads: those the game knows, without blank ones (the blacklist may have grown since the data was made);
--- a set whose heads are all blank keeps its first.
+-- Each set keeps the heads the game knows, minus blank ones, because the blacklist may have grown after the data was
+-- made. A set whose heads are all blank keeps its first.
 local function readSets()
     readBlacklist()
     local missing = {}
@@ -54,7 +53,7 @@ local function readSets()
         end
         if #heads == 0 then heads[1] = firstKnown end
         local animationPairs = {}
-        -- Every dedicated animation is shown: one without a human animation for its emotion has none on the left.
+        -- An animation whose emotion has no human animation is still shown, with nothing on the left.
         for _, entry in ipairs(saved.animations) do
             local humanName, ownName = entry[3], entry[1]
             local humanID, ownID = humanName and id.Seq[humanName], id.Seq[ownName]
@@ -77,7 +76,6 @@ local function readSets()
     if #missing > 0 then print("[make_me_a_monster] DEDICATED|unknown|" .. table.concat(missing, " ")) end
 end
 
--- The set's page shows this head of it.
 local function showHead(set, index)
     headIDs[set.page * 2 - 1], headIDs[set.page * 2] = set.heads[index], set.heads[index]
 end
@@ -89,8 +87,8 @@ local function titleOf(set)
         blacklisted[npcID] and (", " .. blacklisted[npcID]) or "")
 end
 
--- Two heads a set: the left one plays the human animation. A set shown again starts from its first animation and
--- head; the set left goes back to its first head, so its page is filled with it when it comes back.
+-- Each set has two cells, and the left one plays the human animation. A newly shown set starts from its first
+-- animation and head. The set being left goes back to its first head, so its page shows that head on return.
 local function pairAt(position)
     local set, isHuman = sets[math.ceil(position / 2)], position % 2 == 1
     if set ~= shownSet then
@@ -104,8 +102,8 @@ local function pairAt(position)
     return set.pairs[step], isHuman
 end
 
--- Shows the shown set's head and animation now. A cell given another head starts its animation as it is filled;
--- one keeping its head is given it after (setting it twice would load the model twice).
+-- Shows the current head and animation. A cell given a new head starts its animation when it is filled. A cell that
+-- keeps its head gets the animation afterwards instead, because filling it again would load the model twice.
 local function refresh()
     local headBefore = headIDs[shownSet.page * 2]
     showHead(shownSet, headIndex)
@@ -123,14 +121,13 @@ local function onTick()
     refresh()
 end
 
--- Holds the set's head with this number (kept within the set); the animations go on cycling.
+-- Holds the set's head with this number while the animations keep cycling.
 local function jumpToModel(number)
     headIndex, headHeld = math.max(1, math.min(#shownSet.heads, number)), true
     grid:setExtraButton(RESUME_TEXT)
     refresh()
 end
 
--- The heads cycle again, on from the one held.
 local function resumeCycling()
     headHeld = false
     grid.window:SetTitle(titleOf(shownSet))
@@ -155,7 +152,7 @@ function DedicatedAnimationsWindow.open(PrettyUI, parent)
     shownSet = nil
     grid = HeadGrid.open(PrettyUI, parent, {
         title = "Debug: dedicated animations", columns = 2, rows = 1, ids = headIDs, page = placement.page,
-        minWidth = 2 * 260, -- (room for Previous, Next, the model box, the button and the label)
+        minWidth = 2 * 260, -- room for the bottom row's controls
         numberBox = { placeholder = "Model", onSubmit = jumpToModel },
         extraButton = { text = nil, onClick = resumeCycling },
         placement = placement,
@@ -165,14 +162,14 @@ function DedicatedAnimationsWindow.open(PrettyUI, parent)
         end,
         animationFor = function(_, position)
             local pair, isHuman = pairAt(position)
-            if isHuman then return pair[1] end -- (nil without a human animation: the head plays nothing)
+            if isHuman then return pair[1] end -- nil if there is no human animation, so the head plays nothing
             return pair[2]
         end,
         pageLabel = function(page, pages)
             return ("Set %d of %d, animation %d of %d"):format(page, pages, step, #shownSet.pairs)
         end,
         onPick = logHead,
-        marksPick = false, -- (both cells hold the same head)
+        marksPick = false, -- both cells hold the same head
         onClosed = function()
             Event.ServerLogic.Unsubscribe(TICK_SUBSCRIPTION)
             placement.page = grid.page

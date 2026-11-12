@@ -1,4 +1,4 @@
--- Heads drawn at a size of their own, as multipliers of the normal size.
+-- Heads that are drawn at their own size, given as multiples of the normal size.
 
 local GameIds = require("src/game/game_ids")
 
@@ -6,7 +6,7 @@ local HeadSizes = {}
 
 -- { name in the game (id.NPC) = size }.
 local SIZE_OF_NPC = {
-    MYARM_MAN_IN_POT = 0.5, -- (Adventurer: a man in a pot)
+    MYARM_MAN_IN_POT = 0.5, -- Adventurer: a man in a pot
 }
 
 local sizeOfID = {}

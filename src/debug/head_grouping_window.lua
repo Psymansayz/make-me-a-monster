@@ -1,5 +1,5 @@
--- TEMPORARY debug window, for grouping heads by hand: the listed heads sorted by their models. Its log lines, saved in
--- src/data/head_groups.lua by tools/apply_grouping_log.py:
+-- TEMPORARY debug window for grouping heads by hand. It shows the listed heads sorted by their models, and logs
+-- these lines, which tools/apply_grouping_log.py saves in src/data/head_groups.lua:
 -- HEADGROUP|group|line/lines|id=Name@CONSTANT~id=Name@CONSTANT...
 -- HEADDUPLICATES|batch|line/lines|id=Name@CONSTANT~id=Name@CONSTANT...
 -- HEADDUPLICATEOF|batch|id=Name@CONSTANT
@@ -11,30 +11,29 @@ local Animations = require("src/game/animations")
 
 local HeadGroupingWindow = {}
 
-local LINE_LENGTH = 860 -- (a selection can be long: it is split over lines this long, as the BLACKCONST log is)
-local MIN_WIDTH = 980 -- (room for both log buttons and the page label in the bottom row)
-local LINES_PER_PRESS = 800 -- (the console keeps about 1000 lines: the exact duplicates may need several presses)
+local LINE_LENGTH = 860 -- a long selection is split into lines of this length
+local MIN_WIDTH = 980 -- room for both log buttons and the page label in the bottom row
+local LINES_PER_PRESS = 800 -- the console keeps about 1000 lines, so the duplicates may take several presses
 
 local timesLogged = { HEADGROUP = HeadGroups.groupsLogged, HEADDUPLICATES = HeadGroups.batchesLogged }
-local isLogged = {} -- npc id -> true once logged, or in a saved group after its first head: left out of the window
+local isLogged = {} -- npc id -> true if left out of the window: logged, or in a saved group but not its shown head
 local isGrouped = {} -- npc id -> true when in a saved group
 local isGroupShownHead = {} -- npc id -> true when it is the head shown for a group
 for _, group in ipairs(HeadGroups.groups) do
     isGroupShownHead[group[1][1]] = true
     for _, record in ipairs(group) do isGrouped[record[1]] = true end
 end
--- A head can be in several groups: it leaves the window only if none of them shows it.
+-- A head can be in several groups, and it leaves the window only if none of them shows it.
 for npcID in pairs(isGrouped) do
     if not isGroupShownHead[npcID] then isLogged[npcID] = true end
 end
-local exactDuplicateBatches, nextExactBatch = nil, 1 -- found by the first press, once per reload
-local batchAwaitingOriginal = nil -- the batch whose original the next click names (kept if the window closes)
+local exactDuplicateBatches, nextExactBatch = nil, 1 -- found on the first press, once per reload
+local batchAwaitingOriginal = nil -- the batch whose original the next click picks; kept if the window closes
 
 local function recordOf(npcID, nameOf)
     return ("%d=%s@%s"):format(npcID, nameOf(npcID) or "?", config.NPC.FromID(npcID).configName)
 end
 
--- The log lines for the heads selected, none for an empty selection (a button pressed with nothing selected).
 local function logLines(tag, selected, nameOf)
     if #selected == 0 then return {} end
     timesLogged[tag] = timesLogged[tag] + 1
@@ -56,7 +55,7 @@ local function logLines(tag, selected, nameOf)
     return lines
 end
 
--- The head to leave in the window from a sorted selection: logging more heads for a group should not hide its head.
+-- Which head of a sorted selection stays in the window, so that logging more heads for a group keeps its head.
 local function headToKeep(selected)
     for _, npcID in ipairs(selected) do
         if isGroupShownHead[npcID] then return npcID end
@@ -64,18 +63,18 @@ local function headToKeep(selected)
     return selected[1]
 end
 
--- The head of a look to keep: one on the player's rig (it has its own animations), else one in a saved group, else the
--- lowest id.
+-- Which head of a look to keep: first one on the player's rig, since it has its own animations, then one in a saved
+-- group, then the lowest id.
 local function keepRank(npcID)
     return Animations.headsOnPlayerRig[npcID] and 1 or isGrouped[npcID] and 2 or 3
 end
 
--- Every look shared by more than one head: { { original, duplicates = { id... } }... }, by the original's id.
+-- Every look shared by more than one head, sorted by the original's id: { { original, duplicates = { id... } }... }.
 local function findExactDuplicates(heads)
     local headsOfLook, looks, unread, withRecolourTargets = {}, {}, 0, 0
     for _, npcID in ipairs(heads) do
         local look = HeadFilter.describeHead(npcID)
-        -- (a head that can't be read says so in the same words as another: it must not count as the same look)
+        -- Unreadable heads all get the same description, so they must not count as one look.
         if look:find("^unreadable") or look == "no customisation" or look:find("modelList=[]", 1, true) then
             unread = unread + 1
         else
@@ -130,7 +129,7 @@ function HeadGroupingWindow.open(PrettyUI, parent, heads, nameOf, animationFor)
             sortedHeads[#sortedHeads + 1], modelsOf[npcID] = npcID, HeadFilter.headModels(npcID)
         end
     end
-    -- Compared model by model in the game's order: it keeps the heads built from the same models together.
+    -- Compares the model lists in order, which keeps heads built from the same models together.
     table.sort(sortedHeads, function(firstHead, secondHead)
         local firstModels, secondModels = modelsOf[firstHead], modelsOf[secondHead]
         for position = 1, math.max(#firstModels, #secondModels) do
@@ -139,7 +138,7 @@ function HeadGroupingWindow.open(PrettyUI, parent, heads, nameOf, animationFor)
         end
         return firstHead < secondHead
     end)
-    -- TEMPORARY, to see in the console whether the saved groups reach the window in the game.
+    -- TEMPORARY: shows in the console whether the saved groups reach the window.
     print(("[make_me_a_monster] HEADGROUPS|%d saved groups, showing %d of %d heads"):format(#HeadGroups.groups,
         #sortedHeads, #heads))
     return HeadFlaggingWindow.open(PrettyUI, parent, sortedHeads, nameOf, animationFor, {
@@ -147,7 +146,7 @@ function HeadGroupingWindow.open(PrettyUI, parent, heads, nameOf, animationFor)
         minWidth = MIN_WIDTH,
         logButton = "Log group",
         removeOnLog = true,
-        quietClicks = true, -- (the console keeps about 1000 lines: they are for the groups)
+        quietClicks = true, -- the console keeps about 1000 lines, so they are saved for the groups
         idText = function(npcID) return ("ID %d, model %s"):format(npcID, modelsOf[npcID][1] or "?") end,
         firstLogKeeps = headToKeep,
         flaggedLines = function(selected)

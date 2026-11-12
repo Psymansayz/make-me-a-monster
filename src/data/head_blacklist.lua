@@ -1,5 +1,5 @@
--- NPC ids whose chat heads are never listed: found by the head filter (src/game/head_filter.lua) on an
--- earlier run, so they need not be checked each time the plugin starts. Ids picked in the debug head browser
+-- NPC ids whose chat heads are never listed. The head filter (src/game/head_filter.lua) found them on an earlier
+-- run, so they need not be checked each time the plugin starts. Ids flagged in the debug head browser
 -- (src/debug/head_flagging_window.lua) go in `manual`.
 return {
     -- No head model.

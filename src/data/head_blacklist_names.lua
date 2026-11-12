@@ -1,7 +1,6 @@
--- DEVELOPMENT ONLY (dev branch): the name of every blacklisted NPC id (see head_blacklist.lua), as the plugin
--- lists it, saved when the blacklist was made. The plugin never reads or compares these: they are removed for
--- the production version. If a game update shifts NPC ids, matching these names (in id order) against the new
--- names shows where each blacklisted id moved to.
+-- DEVELOPMENT ONLY (dev branch): the name the plugin listed for every NPC id in head_blacklist.lua when the
+-- blacklist was made. The plugin never reads them, and they are removed for the production version. If a game
+-- update shifts NPC ids, matching these names in id order against the new ones shows where each id moved to.
 return {
     blank = {
         [9]="Guard", [15]="Warrior woman", [16]="Man", [18]="Al Kharid warrior", [20]="Paladin", [21]="Hero",

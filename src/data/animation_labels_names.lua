@@ -1,5 +1,5 @@
--- DEVELOPMENT ONLY (dev branch): the names of the animations in animation_labels.lua. The plugin never reads or
--- compares these: they are removed for the production version.
+-- DEVELOPMENT ONLY (dev branch): the names of the animations in animation_labels.lua. The plugin never reads them,
+-- and they are removed for the production version.
 return {
     [2601] = "SLUG3_HUMAN_CHATHEAD_FEAR_NO_TALKING",
     [2602] = "SLUG3_HUMAN_CHATHEAD_HAPPY_NO_TALKING",

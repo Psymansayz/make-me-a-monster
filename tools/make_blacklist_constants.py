@@ -34,9 +34,9 @@ for i in range(1, total + 1):
 
 path = os.path.join(root, "src", "data", "head_blacklist.lua")
 blacklist = LuaRuntime().execute(open(path, encoding="utf8").read())
-out = ["-- DEVELOPMENT ONLY (dev branch): the constant (id.NPC) of every blacklisted NPC id in head_blacklist.lua, by group, as",
-       "-- the game gave them when this file was made (tools/make_blacklist_constants.py). The plugin never reads this: if a",
-       "-- game update shifts NPC ids, these show where each blacklisted id moved to. \"?\": the game gave no constant.",
+out = ["-- DEVELOPMENT ONLY (dev branch): the constant (id.NPC) of every NPC id in head_blacklist.lua, by group, when",
+       "-- tools/make_blacklist_constants.py made this file. The plugin never reads this. If a game update shifts NPC ids,",
+       "-- these show where each blacklisted id moved to. \"?\" means the game gave no constant.",
        "return {"]
 absent = 0
 for group in ("blank", "identical", "manual"):

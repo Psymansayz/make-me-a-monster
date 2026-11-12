@@ -1,7 +1,6 @@
--- DEVELOPMENT ONLY (dev branch): the name of every whitelisted animation id (see animation_whitelist.lua), saved
--- when the whitelist was made. The plugin never reads or compares these: they are removed for the production
--- version. If a game update shifts animation ids, matching these names against the new names shows where each
--- id moved to.
+-- DEVELOPMENT ONLY (dev branch): the name of every id in animation_whitelist.lua when the whitelist was made. The
+-- plugin never reads them, and they are removed for the production version. If a game update shifts animation ids,
+-- these names show where each id moved to.
 return {
     ids = {
         [2601]="SLUG3_HUMAN_CHATHEAD_FEAR_NO_TALKING", [2602]="SLUG3_HUMAN_CHATHEAD_HAPPY_NO_TALKING", [9742]="HUMAN_UPDATE_CHATHEAD_SURPRISED_SUBTLE_LEN1",

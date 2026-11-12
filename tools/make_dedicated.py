@@ -329,11 +329,11 @@ for label, pattern, npcs, spec in SETS:
         lines.append(f"            {{ {lua(human)}, {lua(target)} }},")
     lines.append("        },")
     lines.append("    },")
-header = """-- Chat-head animations of a race or character's own, which its heads play in place of the human ones (alsoHuman: as
--- well as them). Each set: name; heads (the names in the game, id.NPC, of listed heads); animations { name, label,
--- the human animation for the same emotion }; fromHuman { human animation, the set's version }, else default;
--- sameAs { another length, the listed animation }. A head in several sets plays the first. Made by
--- tools/make_dedicated.py.
+header = """-- Chat-head animations that belong to a race or character. Its heads play them instead of the human ones, or as well
+-- as them if alsoHuman is set. Each set has a name; heads, the listed heads' names in the game (id.NPC); animations,
+-- each { name, label, the human animation for the same emotion }; fromHuman, pairs of { human animation, the set's
+-- version }, with default used for any other; and sameAs, pairs of { another length, the listed animation }.
+-- A head in several sets plays the first one. Made by tools/make_dedicated.py.
 return {
 """
 open(out, "w", encoding="utf-8", newline="").write((header + "\n".join(lines) + "\n}\n").replace("\n", "\r\n"))

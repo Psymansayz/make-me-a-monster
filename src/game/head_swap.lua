@@ -8,11 +8,8 @@ local HeadSizes = require("src/game/head_sizes")
 
 local HeadSwap = {}
 
--- The dialogue boxes and the model components in them that hold a head:
---   CHAT_V2_LEFT: the NPC's line, one head, always the NPC's own.
---   CHAT_V2_RIGHT: the player's line, one head.
---   CHAT_V2_PAIR: two heads; each can hold the player, an NPC, or in a dialogue without the player, two NPCs. Only a
---   component holding the player's head is changed.
+-- The NPC's line shows the NPC's own head. The pair box shows two heads, each either the player's or an NPC's, and
+-- only the player's is changed.
 local NPC_SPEECH_INTERFACE = GameIds.resolve("Interface", "CHAT_V2_LEFT")
 local PLAYER_LINE_INTERFACE = GameIds.resolve("Interface", "CHAT_V2_RIGHT")
 local PAIR_INTERFACE = GameIds.resolve("Interface", "CHAT_V2_PAIR")
@@ -40,7 +37,7 @@ local function applyNpcHeadAnimation(component, npcID, playerAnimationOfLine)
     if animationID ~= nil and component.animID ~= animationID then component.animID = animationID end
 end
 
--- Notes the animation of the NPC speech box's head, for the swapped head to use.
+-- Learns the NPC's own animation, for the swapped head to play while no animation is chosen.
 local function learnNpcSpeechAnimation(component)
     if component.visibleGlobal == true and tonumber(component.modelType) == NPC_HEAD_MODEL_TYPE then
         local animationID = tonumber(component.animID)
@@ -48,11 +45,10 @@ local function learnNpcSpeechAnimation(component)
     end
 end
 
--- By head component: what the plugin wrote and what the game had set, to put the player's head back.
+-- Per head component, the animation the plugin wrote and the one the game had set, for putting the player's head back.
 local writtenAnimation, gameAnimation = {}, {}
 local swappedHeads = {} -- a player head turned into an NPC's: { npcID, gameAnimation, orthographic }
 
--- The player's head back, with the animation and the projection the game had set.
 local function putPlayerHeadBack(component, swappedHead)
     component:SetModel(PLAYER_HEAD_MODEL_TYPE, -1)
     component.orthographic = swappedHead.orthographic
@@ -65,13 +61,14 @@ local function writeHeadViewDistance(component, npcID)
     if component.viewDistance ~= viewDistance then component.viewDistance = viewDistance end
 end
 
--- Turns a shown player head into the NPC's head, or with no NPC chosen keeps it, playing the animation picked.
+-- Turns a visible player head into the NPC's head (or keeps the player's head if no NPC is chosen), and plays the
+-- chosen animation on it.
 local function swapComponentHead(component, npcID, componentKey)
     if component.visibleGlobal ~= true then return end
     local modelType = tonumber(component.modelType)
     local swappedHead = swappedHeads[componentKey]
     if swappedHead ~= nil then
-        -- The game may have set the head again: the record holds only while it still shows our NPC.
+        -- The game may have set the head again, so the record only counts while the head still shows our NPC.
         local stillOurs = modelType == NPC_HEAD_MODEL_TYPE and component.modelID1 == swappedHead.npcID
         if not stillOurs then swappedHeads[componentKey] = nil end
         if not stillOurs or swappedHead.npcID == npcID then swappedHead = nil end
@@ -86,14 +83,14 @@ local function swapComponentHead(component, npcID, componentKey)
             local currentAnimation = tonumber(component.animID)
             local lastWrittenAnimation = writtenAnimation[componentKey]
             if lastWrittenAnimation == nil or currentAnimation ~= lastWrittenAnimation then
-                gameAnimation[componentKey] = currentAnimation -- (the game set it)
+                gameAnimation[componentKey] = currentAnimation -- set by the game
             end
             local wantedAnimation = AnimationChoice.playerHeadAnimation(false)
             if wantedAnimation ~= nil then
                 if currentAnimation ~= wantedAnimation then component.animID = wantedAnimation end
                 writtenAnimation[componentKey] = wantedAnimation
             elseif lastWrittenAnimation ~= nil then
-                -- The choice was cleared: back to the game's animation.
+                -- The choice was cleared, so go back to the game's animation.
                 if currentAnimation == lastWrittenAnimation and gameAnimation[componentKey] ~= nil then
                     component.animID = gameAnimation[componentKey]
                 end
@@ -113,11 +110,11 @@ local function swapComponentHead(component, npcID, componentKey)
     if modelType == NPC_HEAD_MODEL_TYPE and component.modelID1 == npcID then
         local ownRecord = swappedHeads[componentKey]
         applyNpcHeadAnimation(component, npcID, ownRecord and ownRecord.gameAnimation or nil)
-        -- The game can reset the view distance for the next line, and a head with custom size needs it set again.
+        -- The game can reset the view distance for the next line, so a swapped head's distance is set again.
         if ownRecord ~= nil then writeHeadViewDistance(component, npcID) end
         return
     end
-    if modelType ~= PLAYER_HEAD_MODEL_TYPE then return end -- an NPC's own head stays
+    if modelType ~= PLAYER_HEAD_MODEL_TYPE then return end -- an NPC's own head is left alone
     local gameAnimationOfLine = tonumber(component.animID)
     if gameAnimationOfLine ~= nil and gameAnimationOfLine >= 0 then
         AnimationChoice.noteGameAnimation(gameAnimationOfLine)
@@ -132,7 +129,7 @@ local function swapComponentHead(component, npcID, componentKey)
     writeHeadViewDistance(component, npcID)
 end
 
--- Puts the player's head back as the game had set it, in place of the NPC's head or the animation chosen.
+-- Puts back the player's head as the game had set it, undoing the NPC's head or the chosen animation.
 local function restoreComponentHead(component, componentKey)
     local modelType = tonumber(component.modelType)
     local swappedHead = swappedHeads[componentKey]
@@ -146,12 +143,12 @@ local function restoreComponentHead(component, componentKey)
     component.viewDistance = Settings.DEFAULT_HEAD_VIEW_DISTANCE
 end
 
--- The head components of each box that can hold the player's head.
+-- Only the boxes that can hold the player's head.
 local HEADS_OF_BOX = {}
 if PLAYER_LINE_INTERFACE ~= nil then HEADS_OF_BOX[PLAYER_LINE_INTERFACE] = PLAYER_LINE_HEADS end
 if PAIR_INTERFACE ~= nil then HEADS_OF_BOX[PAIR_INTERFACE] = PAIR_HEADS end
 
--- The pcalls are for the game's own components, outside the plugin.
+-- The pcalls are there because the components are the game's own, outside the plugin's control.
 local function visitHeads(visit, headComponentIDs)
     for _, componentKey in ipairs(headComponentIDs) do
         local fetched, component = pcall(ui.Interfaces.GetComponent, ui.Interfaces, componentKey)
@@ -159,7 +156,6 @@ local function visitHeads(visit, headComponentIDs)
     end
 end
 
--- Visits the interfaces that could contain a player's head.
 local function forEachOpenHeadComponent(visit)
     if isInterfaceOpen(PLAYER_LINE_INTERFACE) then visitHeads(visit, PLAYER_LINE_HEADS) end
     if isInterfaceOpen(PAIR_INTERFACE) then visitHeads(visit, PAIR_HEADS) end
@@ -169,10 +165,10 @@ local function swapHeadVisit(component, componentKey)
     swapComponentHead(component, Settings.chosenNpcID, componentKey)
 end
 
-local handledBoxes = {} -- interface -> true while it is open and has been handled
+local handledBoxes = {}
 
--- A box staying open for the next line is filled again without closing, and the game sets its head again. These
--- variables arrive a frame before that (the pair box: PAGEPOS only), so the boxes are checked for a few frames after.
+-- When a box stays open for the next line, the game sets its head again a frame after one of these variables arrives
+-- (for the pair box, only PAGEPOS), so the boxes are checked for a few frames afterwards.
 local DIALOGUE_UPDATE_VARIABLE_IDS = {}
 for _, name in ipairs({ "CHAT_V3_UPDATE_INTERFACE", "PAGEPOS" }) do
     local variableID = GameIds.playerVariable(name)
@@ -184,7 +180,7 @@ local VARIABLE_SUBSCRIPTION = "make_me_a_monster_dialogue_update"
 local RECHECK_SUBSCRIPTION = "make_me_a_monster_dialogue_recheck"
 local listeningForUpdates = false
 
--- Draw is subscribed to for just these frames.
+-- Draw is only subscribed to during these frames.
 local function onRecheckFrame()
     framesToRecheck = framesToRecheck - 1
     HeadSwap.refreshOpenDialogues()
@@ -217,8 +213,7 @@ local function stopListeningIfNoBoxHandled()
     listeningForUpdates = false
 end
 
--- A box just opened: its player heads swapped, or the NPC's animation noted. The game may fill a box's head only after
--- the box is seen open: so the boxes are checked again for a few frames.
+-- The game may fill a box's head a little after the box opens, so the boxes are checked again for a few frames.
 local function handleBox(interface)
     local heads = HEADS_OF_BOX[interface]
     if heads ~= nil then
@@ -238,7 +233,6 @@ local function forgetBox(interface)
     end
 end
 
--- The open boxes follow a new head, animation or size.
 function HeadSwap.refreshOpenDialogues()
     forEachOpenHeadComponent(swapHeadVisit)
     if Settings.chosenNpcID ~= nil and isInterfaceOpen(NPC_SPEECH_INTERFACE) then
@@ -257,8 +251,8 @@ local function watchBox(interface)
     end
 end
 
--- Dialogue boxes open and close only as the server says: so this runs on ServerLogic, not every frame.
--- The NPC's own animation is only used with an NPC head, so that box is watched only then.
+-- Dialogue boxes only open and close when the server says so, so this runs on ServerLogic rather than every frame.
+-- The NPC's own animation is only used when an NPC head is chosen, so the NPC's box is only watched then.
 local function watchBoxes()
     watchBox(PLAYER_LINE_INTERFACE)
     watchBox(PAIR_INTERFACE)
@@ -275,7 +269,7 @@ function HeadSwap.start()
     Event.ServerLogic.Subscribe(WATCH_SUBSCRIPTION, watchBoxes)
 end
 
--- The open boxes get the player's head back: the game would only set it again for the next line.
+-- Puts the player's head back in the open boxes, since the game wouldn't set it again until the next line.
 function HeadSwap.stop()
     Event.ServerLogic.Unsubscribe(WATCH_SUBSCRIPTION)
     forEachOpenHeadComponent(restoreComponentHead)
@@ -284,7 +278,6 @@ function HeadSwap.stop()
     stopRechecking()
 end
 
--- Logout: nothing is watched until the game is entered again.
 function HeadSwap.reset()
     HeadSwap.stop()
     writtenAnimation, gameAnimation, swappedHeads = {}, {}, {}

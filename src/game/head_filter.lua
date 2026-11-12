@@ -1,21 +1,19 @@
--- Which of an NPC's variants are worth showing: those whose chat head has a model, one of each look.
+-- Picks which of an NPC's variants are worth showing: those whose chat head has a model, one per look.
 --
--- The lists on a customisation are engine collections: so they are read with pcall, with ipairs, failing that pairs.
--- The recolour and rematerial targets aren't compared: heads that differ only in those look alike.
--- An NPC whose head data can't be read has no head to show. (If this client has no customisation type at all, every
--- variant is kept.)
+-- The lists on a customisation are engine collections, so they are read inside pcall with ipairs, or pairs if that
+-- fails. The recolour and rematerial targets aren't compared, because heads that differ only in those look alike.
 
 local Blacklist = require("src/data/head_blacklist")
 
 local HeadFilter = {}
 
--- The blacklisted ids, hidden without being checked.
+-- The blacklisted ids, which are hidden without being checked.
 local listed = {}
 for _, group in ipairs({ Blacklist.blank or {}, Blacklist.identical or {}, Blacklist.manual or {} }) do
     for _, npcID in ipairs(group) do listed[npcID] = true end
 end
 
--- A list or map from the engine as text, the same for the same contents: arrays by position, maps by key.
+-- An engine list or map as text. Equal contents give equal text.
 local function describe(value, depth)
     depth = depth or 0
     if value == nil then return "" end
@@ -44,10 +42,9 @@ local function count(value)
     return n
 end
 
-local cache = {} -- npc id -> signature text, false (no head model), or nil (couldn't be read)
-local read = {}  -- npc id -> true once looked at
+local cache = {} -- npc id -> signature text, false if it has no head model, or nil if it couldn't be read
+local read = {}  -- npc id -> true once it has been read
 
--- The head of an NPC as text (equal for equal looks), false if it has no model, nil if it can't be read.
 local function signature(npcID)
     if read[npcID] then return cache[npcID] end
     read[npcID] = true
@@ -64,7 +61,7 @@ local function signature(npcID)
     return cache[npcID]
 end
 
--- Development: every field of an NPC's head customisation as text, for telling apart heads the signature calls alike.
+-- For telling apart heads that have the same signature.
 function HeadFilter.describeHead(npcID)
     local succeeded, text = pcall(function()
         local custom = ui.NPCCustomisation.new(npcID, false)
@@ -79,7 +76,6 @@ function HeadFilter.describeHead(npcID)
     return succeeded and text or ("unreadable: " .. tostring(text))
 end
 
--- Development: the model ids of an NPC's head, in order (none if it has no models or can't be read).
 function HeadFilter.headModels(npcID)
     local models = {}
     pcall(function()
@@ -95,8 +91,7 @@ function HeadFilter.headModels(npcID)
     return models
 end
 
--- Development: the highest model id of an NPC's head (0 if it has none). Model ids are given out in order, so the
--- highest tells roughly how new the head is.
+-- Model ids are given out in order, so the highest tells roughly how new the head is.
 function HeadFilter.newestModel(npcID)
     local highest = 0
     for _, modelID in ipairs(HeadFilter.headModels(npcID)) do
@@ -105,7 +100,7 @@ function HeadFilter.newestModel(npcID)
     return highest
 end
 
--- The ids worth showing from `ids`, in order. Blacklisted ids are left out without being checked.
+-- The ids worth showing from `ids`, in order.
 function HeadFilter.variants(ids)
     local shown, seen = {}, {}
     local canTell = ui ~= nil and ui.NPCCustomisation ~= nil
@@ -113,11 +108,11 @@ function HeadFilter.variants(ids)
         if not listed[npcID] then
             local sig = signature(npcID)
             if sig == false then
-                -- (no head model: left out)
+                -- no head model, so it is left out
             elseif sig == nil then
-                if not canTell then shown[#shown + 1] = npcID end -- (no head data: left out)
+                if not canTell then shown[#shown + 1] = npcID end -- shown only if the client has no customisation type
             elseif seen[sig] ~= nil then
-                -- (looks like one already shown: left out)
+                -- looks like one already shown, so it is left out
             else
                 seen[sig] = npcID
                 shown[#shown + 1] = npcID

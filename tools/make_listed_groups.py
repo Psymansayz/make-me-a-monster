@@ -13,9 +13,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from apply_grouping_log import QUOTED, load_saved, lua_string, read, unescape, write  # noqa: E402
 
 HEADER = [
-    "-- The NPC heads the plugin lists, saved so that nothing has to be scanned or checked when it runs, each by its",
-    "-- name in the game (id.NPC; ids can differ between game builds). Made by tools/make_listed_groups.py.",
-    "-- groups = { { name, members = { { member name, { NPC name... } }... } }... }, in the order of the dropdown.",
+    "-- The NPC heads the plugin lists, saved so that nothing has to be scanned at run time. Each is stored by its name in",
+    "-- the game (id.NPC), because ids can differ between game builds. Made by tools/make_listed_groups.py.",
+    "-- groups = { { name, members = { { member name, { NPC name... } }... } }... }, in dropdown order.",
     "-- The first NPC of a group is the head shown for it. A head can be in several groups.",
 ]
 

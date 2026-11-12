@@ -1,5 +1,5 @@
 -- DEVELOPMENT ONLY (dev branch): the names behind the ids in player_head_animations.lua, as { listed animation,
--- player twin }. The plugin never reads or compares these: they are removed for the production version.
+-- player twin }. The plugin never reads them, and they are removed for the production version.
 return {
     twin = {
         [9742] = { "HUMAN_UPDATE_CHATHEAD_SURPRISED_SUBTLE_LEN1", "HUMAN_ACTOR_CHATHEAD_SHOCK_SUBTLE" },

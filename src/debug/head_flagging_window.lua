@@ -1,21 +1,18 @@
--- TEMPORARY debug window: every listed chat head, for flagging the ones that should be blacklisted.
+-- TEMPORARY debug window that shows every listed chat head, for flagging the ones that should be blacklisted.
 --
 -- HeadFlaggingWindow.open(PrettyUI, parent, heads, nameOf, animFor, options): heads = { id... } in the order shown.
--- options (all optional) lets the same window show and flag other things than heads (the animations on Hans):
--- title; logLabel (the word the log lines start with, "blacklist" for heads); setup(model, id), which sets a cell's
--- model up in place of the NPC head and animation; tint(id), the colour { r, g, b, a } of a cell not flagged;
--- flaggedLines(ids), the lines "Log flagged" prints for the flagged ids (in place of the one line of ids);
--- logButton, that button's text; removeOnLog, the heads logged leave the window; quietClicks, no log line per click;
--- idText(id), the text under the name (in place of the id); secondLogButton and secondFlaggedLines(ids), another
--- log button beside the first, with its own lines; minWidth, the least the window can be resized to;
--- headClicked(id), given a click first, true if it used the click (no flag changes); labelNote(), text for the
--- bottom label in place of the head counts, or nil; firstLogKeeps(ids), the id of the head the first log button
--- leaves in the window (with removeOnLog).
--- HeadFlaggingWindow.tick(): every frame. HeadFlaggingWindow.close().
+-- The options are all optional and let the window show and flag things other than heads, such as the animations on
+-- Hans: title; logLabel, the first word of the log lines ("blacklist"); setup(model, id), which sets up a cell's model
+-- instead of the NPC head; tint(id), the { r, g, b, a } of an unflagged cell; logButton, the log button's text;
+-- flaggedLines(ids), the lines that button prints instead of the ids; secondLogButton and secondFlaggedLines(ids), a
+-- second log button and its lines; removeOnLog, whether logged heads leave the window; firstLogKeeps(ids), the head
+-- the first log button leaves in; quietClicks, whether to skip the log line for each click; idText(id), the text under
+-- the name instead of the id; minWidth, the narrowest the window resizes to; headClicked(id), which sees a click first
+-- and returns true if it used it; labelNote(), text for the bottom label instead of the head counts, or nil.
 
 local HeadFlaggingWindow = {}
 
-HeadFlaggingWindow.scaleFor = nil -- function() -> how many times larger than normal the heads are drawn (the head size setting)
+HeadFlaggingWindow.scaleFor = nil -- function() -> the head size setting, 1 for normal
 
 local COLUMNS, ROWS = 5, 4
 local PAGE_SIZE = COLUMNS * ROWS
@@ -32,7 +29,7 @@ local FLAGGED = { 0.55, 0.10, 0.10, 1 }
 local FLAGGED_HOVER = { 0.70, 0.20, 0.20, 1 }
 local TEXT_LIGHT = 0xE9E5DDFF
 
-local windowState = nil -- { window, logLabel, setup, tint, flaggedLines, all, shown, page, pages, flagged, cells, nav, nameOf, animFor, lowered, layoutW, layoutH }
+local windowState = nil
 
 local function say(message)
     print("[make_me_a_monster] " .. message)
@@ -99,7 +96,6 @@ local function toggle(headCell)
     updatePageLabel()
 end
 
--- The grid for the window's content as it is now.
 local function computeGeometry()
     local windowContent = windowState.window.content
     local width, height = windowContent.width, windowContent.height
@@ -113,7 +109,6 @@ local function computeGeometry()
     }
 end
 
--- The head size setting: how many times larger than normal the heads are drawn (1: normal).
 local function currentHeadScale()
     local scale = HeadFlaggingWindow.scaleFor and HeadFlaggingWindow.scaleFor() or 1
     return type(scale) == "number" and scale >= 1 and scale or 1
@@ -163,14 +158,13 @@ local function layoutWindow()
     placeNavigation(grid)
 end
 
--- A cell shown or hidden (all its parts).
 local function setCellHidden(headCell, hidden)
     for _, cellPart in ipairs({ headCell.background, headCell.model, headCell.name, headCell.idLabel, headCell.click }) do
         pcall(function() cellPart.hidden = hidden end)
     end
 end
 
--- One of the window's PAGE_SIZE cells, made once and used for every page.
+-- Made once and reused for every page.
 local function makeCell(position)
     local windowContent = windowState.window.content
     local headCell = { index = position }
@@ -254,7 +248,6 @@ local function showPage()
     end
 end
 
--- The heads whose name or id holds the search text (all of them if it is blank).
 local function applySearch()
     local searchWords = {}
     for searchWord in (windowState.query or ""):lower():gmatch("%S+") do searchWords[#searchWords + 1] = searchWord end
@@ -276,7 +269,7 @@ local function applySearch()
     windowState.page = 1
 end
 
--- The animation chosen changed: the cells filled again (the setup plays the one chosen now).
+-- Fills the cells again so that they play the newly chosen animation.
 function HeadFlaggingWindow.updateAnimations()
     if windowState ~= nil then showPage() end
 end
@@ -291,7 +284,7 @@ function HeadFlaggingWindow.open(PrettyUI, parent, heads, nameOf, animFor, optio
     local width = COLUMNS * START_CELL_W + (COLUMNS - 1) * GAP + PAD * 2 + BORDERS
     local height = ROWS * START_CELL_H + (ROWS - 1) * GAP + PAD * 2 + NAV_HEIGHT + 4 + TITLE_AND_BOTTOM
     local minWidth = COLUMNS * MIN_CELL_W + (COLUMNS - 1) * GAP + PAD * 2 + BORDERS
-    minWidth = math.max(minWidth, options.minWidth or 760) -- (room for the buttons and boxes in the bottom row)
+    minWidth = math.max(minWidth, options.minWidth or 760) -- room for the bottom row's controls
     local minHeight = ROWS * MIN_CELL_H + (ROWS - 1) * GAP + PAD * 2 + NAV_HEIGHT + 4 + TITLE_AND_BOTTOM
     width = math.max(math.min(minWidth, parent.width), math.min(width, parent.width))
     height = math.max(math.min(minHeight, parent.height), math.min(height, parent.height))
@@ -369,7 +362,7 @@ function HeadFlaggingWindow.close()
     pcall(function() window:Destroy() end)
 end
 
--- Every frame while the window is open: what the buttons and boxes asked for, and the cells fitted to its size.
+-- Called every frame while the window is open. Acts on the buttons and boxes, and refits the cells on a resize.
 function HeadFlaggingWindow.tick()
     if windowState == nil or windowState.window == nil then return end
     local navigation = windowState.nav
@@ -417,7 +410,7 @@ function HeadFlaggingWindow.tick()
             local page = windowState.page
             windowState.all, windowState.flagged = remainingHeads, {}
             applySearch()
-            windowState.page = page -- (the same page, or the last if that one is gone: showPage keeps it in range)
+            windowState.page = page -- showPage moves it back if that page is gone
             showPage()
         end
     end

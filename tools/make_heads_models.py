@@ -41,10 +41,9 @@ def q(text):
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-out = ["-- DEVELOPMENT ONLY (dev branch): for every listed NPC id, its name, its head's model ids and its constant (id.NPC), as",
-       "-- the game gave them when this file was made (tools/make_heads_models.py, from the plugin's MODELS| log). The plugin",
-       "-- never reads this: if a game update shifts NPC ids, the constants, names and model ids show where each listed id",
-       "-- moved to. { [npc id] = { name, { model id... }, constant } }.",
+out = ["-- DEVELOPMENT ONLY (dev branch): the name, head model ids and constant (id.NPC) of every listed NPC id, made by",
+       "-- tools/make_heads_models.py from the plugin's MODELS| log. The plugin never reads this. If a game update shifts",
+       "-- NPC ids, these show where each listed id moved to. { [npc id] = { name, { model id... }, constant } }.",
        "return {"]
 for npc_id in sorted(heads):
     name, models, constant = heads[npc_id]
