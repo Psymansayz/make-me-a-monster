@@ -1,5 +1,4 @@
--- The settings' controls, on the plugin's page or in their own window: the NPC search and dropdown, the buttons, the
--- head size slider and the animation dropdown, with the status texts.
+-- The settings controls, shown on the plugin's page or in their own window.
 
 local Settings = require("src/data/settings")
 local NpcDirectory = require("src/game/npc_directory")
@@ -10,29 +9,25 @@ local WindowPlacement = require("src/ui/window_placement")
 
 local SettingsView = {}
 
-local RESULTS_SHOWN = 40 -- NPCs listed in the dropdown at once
+local RESULTS_SHOWN = 40
 local NPC_PLACEHOLDER = "Pick one of the matches"
-local OWN_HEAD_TEXT = "My own head" -- (the closed box with no NPC chosen)
+local OWN_HEAD_TEXT = "My own head" -- what the closed box shows when no NPC is chosen
 
-local controls = nil -- the controls while they are built; .window is the window holding them, if one is
--- What the controls ask of the rest of the plugin (given to build): useOwnHead(), npcPicked(npcID, npcGroup,
--- selectedGroup), groupOfChosenNpc(), openVariants(), openAllHeads(), headSizeChanged(), animationChanged(); and
--- optionally extraControls(view), adding controls under the buttons (dev's debug ones).
+local controls = nil
 local actions = nil
-local npcEntries = nil -- the NPC dropdown's: { query, groups, members (the one that matched), labels, selected }
-local animationEntries = nil -- the animation dropdown's: { options (the listings), selected }
-local isRefreshingDropdown = false -- (SetEntries sends selection events too)
+local npcEntries = nil -- members holds the member whose name each entry matched
+local animationEntries = nil
+local isRefreshingDropdown = false -- true during SetEntries, which sends selection events too
 
--- A dropdown's text doesn't follow a selection made from code: so its text is hidden and a label of ours laid over it.
--- Clicking it open puts it back. (Not on its change events: SetEntries sends those too.)
-local coverStates = {} -- dropdown -> { colours, covered, label, shownText }
+-- A dropdown's text doesn't update when code changes its selection, so its text is hidden and our own label is laid
+-- over it. Clicking the dropdown open brings its text back.
+local coverStates = {}
 
 local function forgetControls()
     controls, coverStates, npcEntries, animationEntries = nil, {}, nil, nil
 end
 
--- The controls, or nil. Their page or window can unload silently (no close runs): then they are forgotten, as they
--- went with it.
+-- Their page or window can unload without any close handler running; if it has, the controls are forgotten.
 local function liveControls()
     if controls ~= nil and ui.Interfaces:GetInterface(controls.interfaceID) == nil then forgetControls() end
     return controls
@@ -42,8 +37,6 @@ local function isCovered(dropdown)
     return coverStates[dropdown] ~= nil and coverStates[dropdown].covered
 end
 
--- The label laid over a dropdown's own text: inset 8, clear of its arrow button (as wide as the box is high); its
--- width follows the view's.
 local function makeCoverLabel(dropdownRoot, colours)
     local label = ui.Text.new(dropdownRoot.parent)
     label.clickthrough = true
@@ -57,7 +50,7 @@ local function makeCoverLabel(dropdownRoot, colours)
     return label
 end
 
--- overlayText: what the covered box shows, or nil for a blank one.
+-- overlayText: the text the covered box shows, or nil to leave it blank.
 local function coverDropdownText(dropdown, hideText, overlayText)
     pcall(function()
         local dropdownRoot = dropdown.root
@@ -107,7 +100,7 @@ local function showTextWhenClicked(dropdown)
     end)
 end
 
--- Fills a dropdown and covers its closed box with closedText (nil: blank).
+-- closedText: the text the closed box shows, or nil to leave it blank.
 local function fillDropdown(dropdown, entries, selected, closedText)
     isRefreshingDropdown = true
     pcall(function() dropdown:SetEntries(entries, selected) end)
@@ -119,7 +112,6 @@ local function isSelectionEvent(eventType)
     return eventType == nil or eventType == ui.SelectionChangeEvent.SELECTED
 end
 
--- A text written only when it changes.
 local function setText(textName, content)
     if controls[textName .. "Shown"] ~= content then
         controls[textName .. "Shown"] = content
@@ -136,7 +128,7 @@ local function chatheadStatusMessage()
     return "Current chathead: " .. (npcName or ("NPC " .. npcID)) .. variantSuffix
 end
 
--- The heads window shows NPC heads, whatever head is in use.
+-- The all heads window shows NPC heads whichever head is in use.
 local function npcAnimationsShown()
     return not AnimationChoice.playerAnimationsInUse() or AllHeadsWindow.isOpen()
 end
@@ -153,8 +145,7 @@ function SettingsView.refreshStatusTexts()
     setText("animationStatusText", animationStatusText())
 end
 
--- Fills the animation dropdown for the head in use: a head of a set lists the set's animations. (Not again while it
--- shows the same.)
+-- If the head in use belongs to a set, the dropdown lists that set's animations.
 function SettingsView.refreshAnimationDropdown()
     if liveControls() == nil then return end
     local npcHeads = npcAnimationsShown()
@@ -178,7 +169,8 @@ function SettingsView.refreshAnimationDropdown()
     fillDropdown(dropdown, entries, selected, selected and options[selected].label or nil)
 end
 
--- A name equal to its group's stands for the whole group (Fairy holds Jukat too): so it counts the group's heads.
+-- A name that matches its group's name stands for the whole group (Fairy includes Jukat too), so its label counts
+-- all of the group's heads.
 local function labelOfEntry(npcGroup, member, memberNpcCount)
     if member == nil or NpcDirectory.lowerCaseAscii(member.name) == NpcDirectory.lowerCaseAscii(npcGroup.name) then
         return NpcDirectory.labelOf(npcGroup.name, npcGroup.idCount)
@@ -186,8 +178,7 @@ local function labelOfEntry(npcGroup, member, memberNpcCount)
     return NpcDirectory.labelOf(member.name, memberNpcCount or #member)
 end
 
--- Fills the NPC dropdown with the groups matching the search. With nothing typed the NPC chosen stays listed, so the
--- dropdown can show it after a restart. (Not again while it shows the same.)
+-- When the search box is empty, the chosen NPC is always listed so the dropdown can show it after a restart.
 function SettingsView.refreshNpcDropdown()
     if liveControls() == nil then return end
     local query = controls.npcSearchBox:GetText()
@@ -234,8 +225,6 @@ function SettingsView.refreshNpcDropdown()
         or (matchCount .. " matches."))
 end
 
--- Builds the controls in a PrettyUI view (window: the window holding it, else nil) and fills the NPC dropdown; the
--- caller fills the animation dropdown, once the animation is fitted to the head in use.
 function SettingsView.build(view, window, givenActions)
     actions = givenActions
     local built = { window = window, interfaceID = view.interfaceID }
@@ -243,7 +232,7 @@ function SettingsView.build(view, window, givenActions)
     built.chatheadStatusText = view:AddText(chatheadStatusMessage())
     built.npcSearchBox = view:AddTextField({
         placeholder = "Search NPCs by name or id",
-        -- (Enter sends the text again: no new search for it)
+        -- Pressing Enter sends the same text again, which shouldn't start a new search.
         onChange = function(_, _, text)
             if npcEntries == nil or text ~= npcEntries.query then SettingsView.refreshNpcDropdown() end
         end,
@@ -253,10 +242,9 @@ function SettingsView.build(view, window, givenActions)
         local npcGroup = npcEntries and npcEntries.groups[entryID]
         if isRefreshingDropdown or not isSelectionEvent(eventType) or npcGroup == nil then return end
         coverDropdownText(built.npcDropdown, false)
-        -- The first NPC of the name that matched the search, else of the group.
         local matchedMember = npcEntries.members[entryID]
         local npcID = matchedMember and matchedMember[1] or npcGroup.shownID
-        -- A member's name can be another group's.
+        -- A member's name can also be another group's name.
         local label = matchedMember and matchedMember.name or npcGroup.name
         actions.npcPicked(npcID, npcGroup,
             label == npcGroup.name and npcGroup or NpcDirectory.groupLabelled(npcID, label))
@@ -275,7 +263,7 @@ function SettingsView.build(view, window, givenActions)
     local limits = Settings.HEAD_SIZE_PERCENT
     view:AddSlider({
         min = limits.min, max = limits.max, step = limits.step, value = Settings.headSizePercent(),
-        -- (a drag sends many values that round to the same size: only a new size is shown)
+        -- Dragging sends many values that round to the same size, so only a change of size is acted on.
         onChange = function(_, sliderValue)
             local before = Settings.headSizePercent()
             local percent = Settings.setHeadSizePercent(sliderValue)
@@ -306,7 +294,7 @@ function SettingsView.build(view, window, givenActions)
     SettingsView.refreshNpcDropdown()
 end
 
--- Forgets the controls, which go with their view; a window's place is noted for next time.
+-- The controls are destroyed along with their view, so this only forgets them.
 function SettingsView.release()
     if liveControls() == nil then return end
     if controls.window ~= nil then WindowPlacement.remember(controls.window, Settings.windows.settings) end
@@ -317,7 +305,7 @@ function SettingsView.isBuilt()
     return liveControls() ~= nil
 end
 
--- The window holding the controls, or nil (on the page, or not built).
+-- The window holding the controls, or nil when they are on the plugin's page.
 function SettingsView.window()
     return liveControls() and controls.window
 end
@@ -326,7 +314,7 @@ function SettingsView.setNotice(text)
     if liveControls() ~= nil then setText("noticeText", text) end
 end
 
--- Empties the search box, without a search: the caller refreshes the dropdown.
+-- Doesn't run a search; the caller refreshes the dropdown.
 function SettingsView.clearSearch()
     if liveControls() ~= nil then controls.npcSearchBox:SetText("") end
 end

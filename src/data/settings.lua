@@ -1,52 +1,50 @@
--- The settings, saved in PersistentDB (shared by all clients in this install).
+-- The settings, saved in PersistentDB, which all clients in this install share.
 
 local Animations = require("src/game/animations")
 local GameIds = require("src/game/game_ids")
 
 local Settings = {}
 
-Settings.chosenNpcID = nil -- the NPC whose head replaces the player's
-Settings.lastSeenNpcAnimationID = nil     -- the chat animation last seen on a real NPC's head (learned)
-Settings.chosenAnimationID = nil -- the animation picked from the animation dropdown (set with chooseAnimation)
--- The last human animation picked: a head outside the sets plays it when a set's animation picked has no human match.
+Settings.chosenNpcID = nil
+Settings.lastSeenNpcAnimationID = nil -- seen on a real NPC's head, not a swapped one
+Settings.chosenAnimationID = nil -- set it with chooseAnimation
+-- The last human animation picked. Heads outside the sets play it when the picked set animation has no human match.
 Settings.humanAnimationID = nil
 Settings.DEFAULT_HEAD_VIEW_DISTANCE = 2150
 Settings.headViewDistance = Settings.DEFAULT_HEAD_VIEW_DISTANCE
-Settings.HEAD_SIZE_PERCENT = { min = 50, max = 300, step = 5 } -- the head size slider
--- Where each window was left: { x, y, width, height } (its top left corner; nil until it has been closed once).
+Settings.HEAD_SIZE_PERCENT = { min = 50, max = 300, step = 5 }
+-- Each is { x, y, width, height }, where x and y are the top left corner. They stay nil until the window first closes.
 Settings.windows = { variants = {}, allHeads = {}, settings = {} }
--- The settings are in their own window, else on the plugin's page. Not saved: the window closes when the plugin
--- unloads, so the settings start on the page.
+-- Not saved. The settings window closes when the plugin unloads, so the settings always start on the page.
 Settings.settingsPoppedOut = false
-Settings.oneHeadPerGroup = true -- the all-heads window shows one head of each group, else every head
-Settings.variantsNpcID = nil -- the NPC chosen when the variants window was last open
-Settings.variantsGroup = nil -- which group of it the window showed (VariantsWindow's text for it)
-Settings.variantsPage = nil  -- the page it was left on
+Settings.oneHeadPerGroup = true
+Settings.variantsNpcID = nil
+Settings.variantsGroup = nil -- in the form VariantsWindow saves it
+Settings.variantsPage = nil
 
--- A saved integer that isn't negative
+-- A negative value means nothing was saved.
 local function savedInteger(settingKey)
     local savedValue = PersistentDB:GetInt(settingKey)
     return savedValue ~= nil and savedValue >= 0 and savedValue or nil
 end
 
--- The saved keys of each window's placement (the all-heads window's are still named "gallery").
+-- The all-heads window's keys still use its old name, "gallery".
 local WINDOW_KEY_PREFIXES = { variants = "variants", allHeads = "gallery", settings = "settings" }
 local PLACEMENT_KEY_SUFFIXES = { x = "X", y = "Y", width = "Width", height = "Height" }
 
--- A config (an NPC, an animation) saved by its name in the game, or nil.
 local function savedConfig(kind, settingKey)
     local configName = PersistentDB:GetString(settingKey)
     return configName ~= nil and configName ~= "" and GameIds.resolve(kind, configName) or nil
 end
 
--- An animation chosen: an empty string for the game's own animation, nothing saved yet for unsaved.
+-- A saved animation choice, where an empty string means the game's own animation, or unsaved if there is none.
 local function savedAnimation(settingKey, unsaved)
     local animationName = PersistentDB:GetString(settingKey)
     if animationName == nil then return unsaved end
     return animationName ~= "" and Animations.idOf(animationName) or nil
 end
 
--- A human animation chosen is also remembered as the last human one.
+-- Choosing a human animation also remembers it as the last human one.
 function Settings.chooseAnimation(animationID)
     Settings.chosenAnimationID = animationID
     if Animations.setOf(animationID) == nil then Settings.humanAnimationID = animationID end
@@ -77,7 +75,13 @@ local function animationNameOf(animationID)
     return animationID and Animations.nameOf(animationID) or ""
 end
 
--- The settings are only kept in memory until the plugin shuts down.
+-- Forgets saved NPCs that the list no longer has. Called once, after the list loads.
+function Settings.forgetUnlistedNpcs(isListed)
+    if Settings.chosenNpcID ~= nil and not isListed(Settings.chosenNpcID) then Settings.chosenNpcID = nil end
+    if Settings.variantsNpcID ~= nil and not isListed(Settings.variantsNpcID) then Settings.variantsNpcID = nil end
+end
+
+-- The settings live in memory and are only written when the plugin shuts down.
 function Settings.save()
     PersistentDB:SetString("npcName", npcNameOf(Settings.chosenNpcID))
     PersistentDB:SetString("lastSeenAnimName", animationNameOf(Settings.lastSeenNpcAnimationID))
@@ -96,12 +100,10 @@ function Settings.save()
     PersistentDB:SetInt("variantsPage", Settings.variantsPage or -1)
 end
 
--- The head size as the slider shows it: a percent of the normal size.
 function Settings.headSizePercent()
     return math.floor(Settings.DEFAULT_HEAD_VIEW_DISTANCE / Settings.headViewDistance * 100 + 0.5)
 end
 
--- The head size from the slider's value, kept to its steps and bounds: the percent set.
 function Settings.setHeadSizePercent(sliderValue)
     local limits = Settings.HEAD_SIZE_PERCENT
     local percent = math.floor(sliderValue / limits.step + 0.5) * limits.step

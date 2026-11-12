@@ -1,5 +1,5 @@
 -- Make Me A Monster: choose an NPC in the settings, and its head replaces yours in the game's dialogue boxes.
--- This file holds the plugin's page, the settings window, and what choosing a head sets going.
+-- This file holds the plugin's page, the settings window, and what happens when a head is chosen.
 
 local Settings = require("src/data/settings")
 local NpcDirectory = require("src/game/npc_directory")
@@ -16,20 +16,19 @@ local PrettyUI = prettyui
 Settings.load()
 HeadSwap.start()
 
--- The client's require keeps every file it loaded for good, and the plugin can't reach that cache: so a data file read
--- only once is emptied after it is converted, and its contents freed. (Not on dev: its debug windows read them again.)
+-- The client's require caches every file for good, and the plugin can't clear that cache, so a data file that is read
+-- once is emptied after it is converted. The dev branch doesn't do this, because its debug windows read them again.
 local function emptyData(data)
     for key in pairs(data) do data[key] = nil end
 end
 emptyData(require("src/data/animation_list"))
 emptyData(require("src/data/dedicated_animations"))
 
-local pluginPageLayer = nil -- the layer the client gives the plugin's page
-local pluginPageToggle = nil -- the page's button switching the settings between the page and their own window
-local pluginPageView = nil -- what the page holds under that button
-local pageNoticeText = nil -- says on the page why the window did not open
+local pluginPageLayer = nil
+local pluginPageToggle = nil
+local pluginPageView = nil
+local pageNoticeText = nil -- the page's text saying why the window did not open
 
--- The open dialogue boxes, the windows' heads and the status texts follow the animation chosen.
 local function animationChanged()
     HeadSwap.refreshOpenDialogues()
     AllHeadsWindow.updateAnimations()
@@ -37,8 +36,6 @@ local function animationChanged()
     SettingsView.refreshStatusTexts()
 end
 
--- The animation chosen fitted to the head in use, and the animation dropdown and status texts to both; whether the
--- animation changed (then everything following it was refreshed too).
 local function refitAnimation()
     local changed = AnimationChoice.fitToHead(AllHeadsWindow.isOpen())
     SettingsView.refreshAnimationDropdown()
@@ -46,7 +43,7 @@ local function refitAnimation()
     return changed
 end
 
--- A head can be in several groups: the one the head chosen was picked from, kept for this session.
+-- The group the chosen head was picked from, remembered for this session, since a head can be in several groups.
 local pickedGroup = nil
 
 local function groupOfChosenNpc()
@@ -56,13 +53,12 @@ local function groupOfChosenNpc()
     return NpcDirectory.groupOfNpc(npcID)
 end
 
--- Defined below.
 local openVariantsWindow
 local openAllHeadsWindow
 local switchSettings
 
--- chosenFrom: "dropdown" or "variants" if that already shows the choice. selectedGroup: the group the head was selected
--- under, if its label named one. What follows the head in use is refreshed once.
+-- chosenFrom is "dropdown" or "variants" when that control already shows the choice. selectedGroup is the group the
+-- head was selected under, if its label named one.
 local function chooseNpc(npcID, chosenFrom, selectedGroup)
     Settings.chosenNpcID = npcID
     if chosenFrom == nil then pickedGroup = selectedGroup end
@@ -70,10 +66,10 @@ local function chooseNpc(npcID, chosenFrom, selectedGroup)
     local animationRefitted = refitAnimation()
     if chosenFrom ~= "dropdown" then SettingsView.refreshNpcDropdown() end
     if chosenFrom ~= "variants" and VariantsWindow.isOpen() then openVariantsWindow() end
-    if not animationRefitted then HeadSwap.refreshOpenDialogues() end -- (else refreshed with the animation)
+    if not animationRefitted then HeadSwap.refreshOpenDialogues() end -- if it was, animationChanged refreshed them
 end
 
--- The layer plugin windows go on; nil while the game screen isn't ready, which setNotice is told.
+-- The layer that plugin windows go on, or nil while the game screen isn't ready, in which case setNotice says so.
 local function windowLayer(setNotice)
     local succeeded, pluginLayer = pcall(function()
         return ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__PLUGIN_BUILD_LAYER_TOP)
@@ -83,15 +79,14 @@ local function windowLayer(setNotice)
     return pluginLayer
 end
 
--- The variants window's button text for the NPC chosen, or nil if it is in no other group.
 local function nextGroupButtonText(npcGroup)
     local nextGroup = NpcDirectory.nextGroupOfNpc(Settings.chosenNpcID, npcGroup)
     return nextGroup and ("View " .. nextGroup.name .. " variants") or nil
 end
 
--- page: the page to show, else that of the head chosen.
+-- page is the page to show, or nil for the page with the chosen head.
 local function showVariantsOf(npcGroup, page)
-    pickedGroup = npcGroup -- (a variant picked in the window stays in this group)
+    pickedGroup = npcGroup -- a variant picked in the window stays in this group
     local showPlayerHeadOnly = Settings.chosenNpcID == nil
     if npcGroup == nil and not showPlayerHeadOnly then return SettingsView.setNotice("Choose an NPC first.") end
     local pluginLayer = windowLayer(SettingsView.setNotice)
@@ -128,41 +123,31 @@ openVariantsWindow = function()
     showVariantsOf(VariantsWindow.firstView(npcID, NpcDirectory.groupsOfNpc(npcID)))
 end
 
--- The heads window closed: the animation and its dropdown go back to the head in use.
+-- When the heads window closes, the animation and its dropdown are fitted back to the head in use.
 AllHeadsWindow.onClosed = function() refitAnimation() end
 
 openAllHeadsWindow = function()
     local pluginLayer = windowLayer(SettingsView.setNotice)
     if pluginLayer == nil then return end
     AllHeadsWindow.open(PrettyUI, pluginLayer, Settings.chosenNpcID, function(npcID, label)
-        SettingsView.clearSearch() -- (so the NPC dropdown lists, and shows, the head picked)
+        SettingsView.clearSearch() -- so the NPC dropdown lists the picked head
         chooseNpc(npcID, nil, NpcDirectory.groupLabelled(npcID, label))
     end)
     refitAnimation()
 end
 
--- A saved NPC the list no longer has (taken out as a bad head) is forgotten.
-local function forgetUnlistedNpcs()
-    if Settings.chosenNpcID ~= nil and NpcDirectory.groupOfNpc(Settings.chosenNpcID) == nil then
-        Settings.chosenNpcID = nil
-    end
-    if Settings.variantsNpcID ~= nil and NpcDirectory.groupOfNpc(Settings.variantsNpcID) == nil then
-        Settings.variantsNpcID = nil
-    end
-end
-
--- The saved heads are not loaded until the settings are first built: dialogue needs only the saved NPC id.
+-- The saved heads aren't loaded until the settings are first built, because dialogue only needs the saved NPC id.
 local function loadHeads()
     if NpcDirectory.isLoaded then return end
     local listedHeads = require("src/data/listed_heads")
     NpcDirectory.loadListedHeads(listedHeads)
-    forgetUnlistedNpcs()
+    Settings.forgetUnlistedNpcs(NpcDirectory.groupOfNpc)
     emptyData(listedHeads)
 end
 
 local settingsActions = {
     useOwnHead = function()
-        SettingsView.clearSearch() -- (so the NPC dropdown shows it)
+        SettingsView.clearSearch() -- so the NPC dropdown shows it
         chooseNpc(nil)
     end,
     npcPicked = function(npcID, npcGroup, selectedGroup)
@@ -186,7 +171,7 @@ local function buildSettings(view, window)
     refitAnimation()
 end
 
--- The settings window's size when first opened, and the least it can be resized to (its content scrolls).
+-- The settings window's size when first opened, and the smallest it can be resized to. Its content scrolls.
 local SETTINGS_WIDTH, SETTINGS_HEIGHT = 420, 560
 local SETTINGS_MIN_WIDTH, SETTINGS_MIN_HEIGHT = 320, 240
 
@@ -213,7 +198,7 @@ local function openSettingsWindow()
             title = "Make Me A Monster", width = width, height = height, x = x, y = y, destroyOnClose = true,
             resizable = true, minWidth = math.min(SETTINGS_MIN_WIDTH, width),
             minHeight = math.min(SETTINGS_MIN_HEIGHT, height),
-            -- Closed with its X: the window destroys itself, and the settings go back to the page.
+            -- Called when its X is clicked. The window destroys itself, and the settings move back to the page.
             onClose = function()
                 SettingsView.release()
                 switchSettings(false)
@@ -235,11 +220,10 @@ local function closeSettingsWindow()
     window:Destroy()
 end
 
--- The page's top row holds the button switching the settings between the page and their own window.
-local TOGGLE_SIZE, TOGGLE_INSET = 20, 4 -- (as PrettyUI's panels draw this button)
+-- The page's top row holds the button that switches the settings between the page and their own window.
+local TOGGLE_SIZE, TOGGLE_INSET = 20, 4 -- matching how PrettyUI's panels draw this button
 local TOGGLE_ROW_HEIGHT = TOGGLE_SIZE + TOGGLE_INSET * 2
 
--- Under the button: the controls, or with the settings in their window, a way to open it.
 local function fillPage(pluginLayer)
     local pageView = PrettyUI.SimpleView.new(pluginLayer, {
         y = TOGGLE_ROW_HEIGHT, width = pluginLayer.width, height = pluginLayer.height - TOGGLE_ROW_HEIGHT,
@@ -262,24 +246,25 @@ local function emptyPage()
     pluginPageView = nil
 end
 
-local showPageToggleState = nil -- (set by buildPageToggle)
+local showPageToggleState = nil -- set by buildPageToggle
 
 switchSettings = function(poppedOut)
     closeSettingsWindow()
     emptyPage()
     Settings.settingsPoppedOut = poppedOut
-    -- The window can outlive the page, which unloads silently: it is built when the client next gives a layer.
+    -- The window can outlive the page, which unloads without notice. If it has, the page is built when the client next
+    -- provides a layer.
     if ui.Interfaces:GetInterface(pluginPageLayer.interfaceID) == nil then return end
     showPageToggleState()
     local succeeded = pcall(fillPage, pluginPageLayer)
     if succeeded and poppedOut then openSettingsWindow() end
 end
 
--- Components can't be destroyed in their own click handler, and switching replaces the view: so the button is a sprite
--- of the page's own, not one of the view's controls.
+-- Components can't be destroyed in their own click handler, and switching replaces the view, so the button is a sprite
+-- on the page itself rather than one of the view's controls.
 local function buildPageToggle(pluginLayer)
     local button = ui.Sprite.new(pluginLayer)
-    button:SetPos(-TOGGLE_SIZE - TOGGLE_INSET, TOGGLE_INSET, 1.0) -- (from the page's right edge)
+    button:SetPos(-TOGGLE_SIZE - TOGGLE_INSET, TOGGLE_INSET, 1.0) -- from the page's right edge
     button:SetSize(TOGGLE_SIZE, TOGGLE_SIZE)
     button.clickthrough = false
     local hovered, pressed = false, false
@@ -331,7 +316,6 @@ Event.ContentLayerReady.Subscribe("make_me_a_monster_content", function(event)
     pcall(buildPage, event.component)
 end)
 
--- Dialogue boxes are only watched in the game.
 Event.GameStateChanged.Subscribe("make_me_a_monster_state", function(event)
     if event.newState == GameState.GAME then
         HeadSwap.start()
@@ -340,8 +324,8 @@ Event.GameStateChanged.Subscribe("make_me_a_monster_state", function(event)
     end
 end)
 
--- Closing the heads window refits the animation and refreshes the boxes: so the settings close first, and the player's
--- head goes back last.
+-- Closing the heads window refits the animation and refreshes the boxes, so the settings close first and the player's
+-- head is put back last.
 function PluginShutdown()
     Event.ContentLayerReady.Unsubscribe("make_me_a_monster_content")
     Event.GameStateChanged.Unsubscribe("make_me_a_monster_state")
